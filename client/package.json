@@ -1,0 +1,12 @@
+{
+  "name": "@familyroots/client",
+  "version": "1.0.0",
+  "description": "Frontend web application for FamilyRoots Digital Family Heritage Platform",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "tsc --noEmit",
+    "preview": "vite preview"
+  }
+}

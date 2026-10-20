@@ -1,0 +1,14 @@
+{
+  "name": "@familyroots/server",
+  "version": "1.0.0",
+  "description": "Backend API service for FamilyRoots Digital Family Heritage Platform",
+  "main": "src/server.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "lint": "tsc --noEmit",
+    "test": "echo \"Testing suite prepared for Phase 2\""
+  }
+}
