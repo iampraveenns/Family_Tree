@@ -92,7 +92,11 @@ export async function runMemoryTypeMigration(): Promise<{
 }
 
 // Standalone execution script
-if (import.meta.url === `file://${process.argv[1]}`) {
+const isDirectRun = typeof require !== 'undefined'
+  ? require.main === module
+  : Boolean(typeof process !== 'undefined' && process.argv[1] && process.argv[1].endsWith('migrateMemoryTypes.ts'));
+
+if (isDirectRun) {
   (async () => {
     try {
       await database.connect();

@@ -128,12 +128,12 @@ describe('Phase 47: Family Tree Node Memories Button & Upload Flow', () => {
     );
 
     expect(html).toContain('data-testid="node-popup-editbar-mem-101"');
-    expect(html).toContain('background-color:#FFF9D6');
+    expect(html).toMatch(/background-color:\s*(rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
     expect(html).toContain('title="Upload Memories (Photos/Videos)"');
     expect(html).toContain('Memories</span>');
   });
 
-  it('renders UploadNodeMemoryModal displaying photo/video upload capabilities that will be visible in the Memories section', () => {
+  it('renders UploadNodeMemoryModal displaying Add Memories title, Date datepicker, and photos, videos, and audios upload capabilities without yellow banner', () => {
     const html = renderToString(
       <MemoryRouter>
         <UploadNodeMemoryModal
@@ -146,20 +146,24 @@ describe('Phase 47: Family Tree Node Memories Button & Upload Flow', () => {
     );
 
     // Modal title & subtitle
-    expect(html).toContain('Upload Memories for');
+    expect(html).toContain('Add Memories');
     expect(html).toContain('Devan Pattara');
-    expect(html).toContain('Photos &amp; videos will be permanently preserved and visible in the Memories section');
+    expect(html).not.toContain('Upload Memories for');
 
-    // Information callout about the Memories Section
-    expect(html).toContain('Preserve in Family Memories:');
-    expect(html).toContain('Memories section');
+    // Yellow banner callout next to heading is removed
+    expect(html).not.toContain('Preserve in Family Memories:');
 
-    // Drag and drop photo or video
-    expect(html).toContain('Select Photo or Video');
-    expect(html).toContain('Drag and drop a photo or video here');
-    expect(html).toContain('accept="image/*,video/*"');
+    // Drag and drop photo, video, or audio
+    expect(html).toContain('Select Photo, Video, or Audio');
+    expect(html).toContain('Drag and drop photos, videos, or audios here');
+    expect(html).toContain('accept="image/*,video/*,audio/*"');
+
+    // Date datepicker (not just regular text input)
+    expect(html).toContain('type="date"');
+    expect(html).toContain('Date');
+    expect(html).not.toContain('Date or Year (Optional)');
 
     // Form buttons
-    expect(html).toContain('Upload &amp; Save to Memories');
+    expect(html).toContain('Add to Memories');
   });
 });

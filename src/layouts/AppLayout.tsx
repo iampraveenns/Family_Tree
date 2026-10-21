@@ -3,16 +3,8 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { GitFork, LogOut } from 'lucide-react';
 import { clearAuthTokens } from '../utils/api.ts';
 
-import { useFamilyStore } from '../stores/useFamilyStore.ts';
-import { formatFamilyDisplayName } from '../utils/mediaUtils.ts';
-
 export const AppLayout: React.FC = () => {
   const navigate = useNavigate();
-  const { currentFamily } = useFamilyStore();
-  const familyName =
-    currentFamily?.name && currentFamily.name !== 'Family Vault'
-      ? formatFamilyDisplayName(currentFamily.name)
-      : '';
 
   const handleSignOut = () => {
     clearAuthTokens();
@@ -23,23 +15,16 @@ export const AppLayout: React.FC = () => {
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#F8FAFC] text-[#0F172A] antialiased select-none">
       {/* Sleek Minimal Header for Family Tree - All Clean Light Styling */}
       <header className="h-14 border-b border-[#E2E8F0] bg-white flex items-center justify-between px-4 sm:px-6 shrink-0 z-30 shadow-xs">
-        {/* Left: Brand & Family Name */}
+        {/* Left: Brand Application Name */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-[#2563EB] text-white flex items-center justify-center shadow-xs">
               <GitFork className="w-4 h-4 text-white" />
             </div>
             <span className="font-bold text-base text-[#0F172A] tracking-tight">
-              FamilyRoots
+              FamilyTree
             </span>
           </div>
-          {familyName && (
-            <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-[#E2E8F0]">
-              <span className="text-sm font-semibold text-[#17233C]" data-testid="nav-family-name">
-                {familyName}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Right: Sign Out */}

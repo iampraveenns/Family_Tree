@@ -75,16 +75,17 @@ describe('Phase 48: Spouse DOM Compulsory, DOM Color Matching & Nav Header Updat
     expect(html).not.toContain('text-[#2563EB]" title="DOM:');
   });
 
-  it('2. AppLayout top nav bar removes Pattara Family dropdown selector', () => {
+  it('2. AppLayout top nav bar removes Pattara Family dropdown selector and renders FamilyTree brand', () => {
     const html = renderToString(<AppLayout />);
 
-    // Brand and sign out button are present
-    expect(html).toContain('FamilyRoots');
+    // Brand is FamilyTree and sign out button are present
+    expect(html).toContain('FamilyTree');
+    expect(html).not.toContain('FamilyRoots');
     expect(html).toContain('Sign Out');
 
-    // Pattara Family dropdown is removed from top nav bar
+    // Family name dropdown and family name badge are removed from top nav bar
     expect(html).not.toContain('Select Family Vault');
-    expect(html).not.toContain('Pattara Family');
+    expect(html).not.toContain('data-testid="nav-family-name"');
   });
 
   it('3. AddMemberModal marks Marriage Date (DOM) as required and compulsory when relationshipType is SPOUSE', () => {

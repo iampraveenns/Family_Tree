@@ -9,7 +9,6 @@ import {
   Minimize2,
   Map as MapIcon,
   X,
-  FolderHeart,
 } from 'lucide-react';
 
 export interface TreeFloatingControlsProps {
@@ -149,14 +148,13 @@ export const TreeFloatingControls: React.FC<TreeFloatingControlsProps> = ({
               data-testid="toggle-memories-sidebar-button"
               aria-label={isMemoriesSidebarOpen ? 'Close Memories Sidebar' : 'Open Memories Sidebar'}
               title={isMemoriesSidebarOpen ? 'Close Memories Sidebar' : 'Open Memories Sidebar (Photos, Videos, Audios)'}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer shrink-0 ${
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all cursor-pointer shrink-0 text-xs font-semibold ${
                 isMemoriesSidebarOpen
-                  ? 'bg-[#2563EB] text-white font-semibold shadow-xs'
+                  ? 'bg-[#2563EB] text-white shadow-xs'
                   : 'text-[#475569] hover:text-[#2563EB] hover:bg-[#F1F5F9] active:bg-[#DBEAFE]'
               }`}
             >
-              <FolderHeart className={`w-3.5 h-3.5 ${isMemoriesSidebarOpen ? 'text-white' : 'text-[#2563EB]'}`} />
-              <span className="hidden sm:inline text-xs font-semibold">Memories</span>
+              <span>Memories</span>
               {typeof memoriesCount === 'number' && memoriesCount > 0 && (
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
@@ -205,7 +203,7 @@ export const TreeFloatingControls: React.FC<TreeFloatingControlsProps> = ({
                 if (node.type === 'generationMarker' || node.type === 'coupleJunction') {
                   return 'transparent';
                 }
-                return '#FFF9D6';
+                return 'rgb(255, 255, 30)';
               }}
               nodeStrokeColor="#B8D4FF"
               nodeStrokeWidth={1.5}

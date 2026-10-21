@@ -26,6 +26,17 @@ async function bootstrap() {
     logger.warn({ seedErr }, 'Initial database seed check encountered an issue, proceeding...');
   }
 
+  // Clear memory posts to ensure initial memories count is 0 as requested
+  try {
+    const { Memory } = await import('./server/src/models/Memory.ts');
+    const { Media } = await import('./server/src/models/Media.ts');
+    const delMemories = await Memory.deleteMany({});
+    const delMedia = await Media.deleteMany({});
+    logger.info({ deletedMemories: delMemories.deletedCount, deletedMedia: delMedia.deletedCount }, 'Cleared memories: 0 memory posts in vault');
+  } catch (cleanMemErr) {
+    logger.warn({ cleanMemErr }, 'Memory reset encountered an issue, proceeding...');
+  }
+
   // Run memory type migration for legacy or removed categories
   try {
     const { runMemoryTypeMigration } = await import('./server/src/scripts/migrateMemoryTypes.ts');

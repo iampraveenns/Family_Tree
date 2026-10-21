@@ -242,6 +242,38 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
         borderColor: 'border-[#6366F1]',
       };
     }
+    if (branchKey.includes('arun')) {
+      return {
+        accent: '#0D9488', // Teal
+        dot: 'bg-[#0D9488]',
+        topBar: 'bg-[#0D9488]',
+        borderColor: 'border-[#0D9488]',
+      };
+    }
+    if (branchKey.includes('ananth')) {
+      return {
+        accent: '#8B5CF6', // Purple
+        dot: 'bg-[#8B5CF6]',
+        topBar: 'bg-[#8B5CF6]',
+        borderColor: 'border-[#8B5CF6]',
+      };
+    }
+    if (branchKey.includes('meena')) {
+      return {
+        accent: '#EC4899', // Pink
+        dot: 'bg-[#EC4899]',
+        topBar: 'bg-[#EC4899]',
+        borderColor: 'border-[#EC4899]',
+      };
+    }
+    if (branchKey.includes('govindan') || branchKey.includes('patriarch')) {
+      return {
+        accent: '#475569', // Slate
+        dot: 'bg-[#475569]',
+        topBar: 'bg-[#475569]',
+        borderColor: 'border-[#475569]',
+      };
+    }
     return {
       accent: '#1D4ED8', // Deep Blue
       dot: 'bg-[#1D4ED8]',
@@ -377,10 +409,10 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
       style={{
         width: 280,
         height: 160,
-        backgroundColor: '#FFF9D6',
+        backgroundColor: 'rgb(255, 255, 30)',
       }}
       aria-label={`Family member ${fullName}, Generation ${member.generation}`}
-      className={`group relative w-[280px] h-[160px] box-border rounded-2xl border-[1.5px] p-2.5 transition-all duration-200 ease-out cursor-default select-none outline-none flex flex-col justify-between bg-[#FFF9D6] ${
+      className={`group relative w-[280px] h-[160px] box-border rounded-2xl border-[1.5px] p-2.5 transition-all duration-200 ease-out cursor-default select-none outline-none flex flex-col justify-between bg-[rgb(255,255,30)] ${
         isPhotoMenuOpen ? 'overflow-visible z-50' : 'overflow-hidden'
       } ${
         isPathHighlighted
@@ -428,13 +460,13 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
         className="!w-2 !h-2 !bg-[#7EA7D9] !border-[1.5px] !border-white !-bottom-1"
       />
 
-      {/* Floating Action Pill Menu for Selected Member (Popup editbar with #FFF9D6 bg and correct text color) */}
+      {/* Floating Action Pill Menu for Selected Member (Popup editbar with rgb(255, 255, 30) bg and correct text color) */}
       {isSelected && (
         <div
           onClick={(e) => e.stopPropagation()}
           data-testid={`node-popup-editbar-${member.id}`}
-          style={{ backgroundColor: '#FFF9D6' }}
-          className="absolute -top-11 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 px-1.5 py-1 rounded-xl bg-[#FFF9D6] shadow-lg border border-[#B8D4FF] text-[11px] whitespace-nowrap text-[#17233C]"
+          style={{ backgroundColor: 'rgb(255, 255, 30)' }}
+          className="absolute -top-11 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 px-1.5 py-1 rounded-xl bg-[rgb(255,255,30)] shadow-lg border border-[#B8D4FF] text-[11px] whitespace-nowrap text-[#17233C]"
         >
           <button
             type="button"
@@ -468,12 +500,19 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
           <div className="w-[1px] h-3.5 bg-[#B8D4FF]" />
           <button
             type="button"
-            onClick={() => onUploadMemory?.(member)}
-            className="px-2.5 py-1 rounded-lg hover:bg-[#FEF08A]/50 text-[#17233C] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
-            title="Upload Memories (Photos/Videos)"
+            disabled={isDeceased}
+            aria-disabled={isDeceased}
+            onClick={() => !isDeceased && onUploadMemory?.(member)}
+            className={`px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1.5 transition-colors ${
+              isDeceased
+                ? 'opacity-40 cursor-not-allowed text-slate-400'
+                : 'hover:bg-[#FEF08A]/50 text-[#17233C] cursor-pointer'
+            }`}
+            title={isDeceased ? `Memories disabled for deceased person (${fullName})` : "Upload Memories (Photos/Videos)"}
+            aria-label={isDeceased ? `Memories disabled for deceased person ${fullName}` : "Upload Memories (Photos/Videos)"}
           >
-            <ImageIcon className="w-3.5 h-3.5 text-[#2563EB]" />
-            <span className="text-[#17233C]">Memories</span>
+            <ImageIcon className={`w-3.5 h-3.5 ${isDeceased ? 'text-slate-400' : 'text-[#2563EB]'}`} />
+            <span className={isDeceased ? 'text-slate-400' : 'text-[#17233C]'}>Memories</span>
           </button>
         </div>
       )}
@@ -491,7 +530,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
             </span>
           )}
           {hasCustomBranch && (
-            <div className="flex items-center gap-1 min-w-0 truncate">
+            <div className="flex items-center gap-1 min-w-0 truncate" data-testid={`node-branch-badge-${member.id}`}>
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${branchConfig.dot}`} />
               <span className="text-[10.5px] font-semibold text-[#17233C]/80 truncate">
                 {member.branchName}
@@ -763,9 +802,13 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
             </button>
             <button
               type="button"
+              disabled={isDeceased}
+              aria-disabled={isDeceased}
               onClick={(e) => {
                 e.stopPropagation();
-                onUploadMemory?.(member);
+                if (!isDeceased) {
+                  onUploadMemory?.(member);
+                }
               }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
@@ -773,14 +816,28 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   e.stopPropagation();
-                  onUploadMemory?.(member);
+                  if (!isDeceased) {
+                    onUploadMemory?.(member);
+                  }
                 }
               }}
               data-testid={`node-memories-btn-${member.id}`}
               data-action="upload-memory"
-              title={`Upload photos or videos for ${fullName} to Memories`}
-              aria-label={`Upload Memories for ${fullName}`}
-              className="px-2 py-0.5 rounded bg-white hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#7EA7D9] text-[#17233C] border border-[#B8D4FF] font-medium text-[10.5px] transition-colors cursor-pointer shadow-2xs select-none"
+              title={
+                isDeceased
+                  ? `Memories disabled for deceased person (${fullName})`
+                  : `Upload photos or videos for ${fullName} to Memories`
+              }
+              aria-label={
+                isDeceased
+                  ? `Memories disabled for deceased person ${fullName}`
+                  : `Upload Memories for ${fullName}`
+              }
+              className={`px-2 py-0.5 rounded ${
+                isDeceased
+                  ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-40 font-medium text-[10.5px] transition-colors shadow-2xs select-none'
+                  : 'bg-white hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#7EA7D9] text-[#17233C] border border-[#B8D4FF] font-medium text-[10.5px] transition-colors cursor-pointer shadow-2xs select-none'
+              }`}
             >
               + Memories
             </button>
@@ -789,9 +846,13 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
           <div className="flex items-center gap-1">
             <button
               type="button"
+              disabled={isDeceased}
+              aria-disabled={isDeceased}
               onClick={(e) => {
                 e.stopPropagation();
-                onUploadMemory?.(member);
+                if (!isDeceased) {
+                  onUploadMemory?.(member);
+                }
               }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
@@ -799,14 +860,28 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   e.stopPropagation();
-                  onUploadMemory?.(member);
+                  if (!isDeceased) {
+                    onUploadMemory?.(member);
+                  }
                 }
               }}
               data-testid={`node-memories-btn-${member.id}`}
               data-action="upload-memory"
-              title={`Upload photos or videos for ${fullName} to Memories`}
-              aria-label={`Upload Memories for ${fullName}`}
-              className="px-2 py-0.5 rounded bg-white hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#7EA7D9] text-[#17233C] border border-[#B8D4FF] font-medium text-[10.5px] transition-colors cursor-pointer shadow-2xs select-none"
+              title={
+                isDeceased
+                  ? `Memories disabled for deceased person (${fullName})`
+                  : `Upload photos or videos for ${fullName} to Memories`
+              }
+              aria-label={
+                isDeceased
+                  ? `Memories disabled for deceased person ${fullName}`
+                  : `Upload Memories for ${fullName}`
+              }
+              className={`px-2 py-0.5 rounded ${
+                isDeceased
+                  ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-40 font-medium text-[10.5px] transition-colors shadow-2xs select-none'
+                  : 'bg-white hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#7EA7D9] text-[#17233C] border border-[#B8D4FF] font-medium text-[10.5px] transition-colors cursor-pointer shadow-2xs select-none'
+              }`}
             >
               + Memories
             </button>

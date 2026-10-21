@@ -120,8 +120,8 @@ describe('Phase 47: FamilyRoots — Spouse Gen Removal, RIP Status & #FFF9D6 Pop
 
       // Popup editbar container
       expect(html).toContain('data-testid="node-popup-editbar-mem-primary-1"');
-      expect(html).toContain('background-color:#FFF9D6');
-      expect(html).toContain('bg-[#FFF9D6]');
+      expect(html).toMatch(/background-color:\s*(rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
+      expect(html).toMatch(/(bg-\[rgb\(255,255,30\)\]|bg-\[#FFF9D6\])/);
       expect(html).toContain('text-[#17233C]');
       expect(html).toContain('Edit');
       expect(html).toContain('Profile');

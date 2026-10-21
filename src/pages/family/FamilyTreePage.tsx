@@ -21,11 +21,12 @@ import {
   Heart,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   UserPlus,
   ImageIcon,
   Camera,
   Pencil,
-  Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFamilyStore } from '../../stores/useFamilyStore.ts';
@@ -110,7 +111,15 @@ const FamilyTreeInner: React.FC = () => {
   }, [currentFamily?.id, fetchFamilyTree]);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const branchScrollRef = useRef<HTMLDivElement>(null);
   const hasInitialFitted = useRef(false);
+
+  const handleScrollBranches = (direction: 'left' | 'right') => {
+    if (branchScrollRef.current) {
+      const scrollAmount = direction === 'left' ? -220 : 220;
+      branchScrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
 
   // Add Relationship Modal state - isolated form handled inside AddMemberModal
   const [isAddRelationshipOpen, setIsAddRelationshipOpen] = useState(false);
@@ -192,10 +201,14 @@ const FamilyTreeInner: React.FC = () => {
 
   const handleOpenUploadMemoryModal = useCallback((member?: FamilyMember | null) => {
     const target = member || selectedMember || members[0] || null;
+    if (target && (!target.isLiving || Boolean(target.dateOfDeath))) {
+      toastError(`Memories upload is disabled for deceased relative (${target.displayName || `${target.firstName} ${target.lastName}`.trim()}).`);
+      return;
+    }
     setMemoryUploadMember(target);
     setIsMemoryUploadModalOpen(true);
     setShowHint(false);
-  }, [selectedMember, members]);
+  }, [selectedMember, members, toastError]);
 
   const handleEditMemberSubmit = useCallback(
     async (memberId: string, data: Partial<MemberFormData>) => {
@@ -1477,32 +1490,65 @@ const FamilyTreeInner: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Branch Filter Tabs (Requirement 6 & 16) */}
+          {/* Branch Filter Tabs with Left/Right Scroll (Shows 4 branches at a time including All Branches) */}
           <div className="flex items-center rounded-xl bg-white p-1 border-[1.5px] border-[#CBD5E1] text-xs shadow-xs">
+            {/* Scroll Left Button */}
             <button
-              onClick={() => setSelectedBranch(null)}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
-                selectedBranch === null
-                  ? 'bg-[#2563EB] text-white shadow-xs font-semibold'
-                  : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
-              }`}
+              type="button"
+              data-testid="branch-scroll-left-button"
+              onClick={() => handleScrollBranches('left')}
+              aria-label="Scroll branches left"
+              title="Scroll branches left"
+              className="p-1 rounded-lg text-[#64748B] hover:text-[#2563EB] hover:bg-[#F1F5F9] transition-colors cursor-pointer shrink-0"
             >
-              All Branches
+              <ChevronLeft className="w-3.5 h-3.5" />
             </button>
-            {members.length > 0 &&
-              branches.map((b) => (
-                <button
-                  key={b.id}
-                  onClick={() => setSelectedBranch(b.id)}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
-                    selectedBranch === b.id
-                      ? 'bg-[#2563EB] text-white shadow-xs font-semibold'
-                      : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
-                  }`}
-                >
-                  {b.name}
-                </button>
-              ))}
+
+            {/* Scrollable Container with exact width showing 4 branches including All Branches */}
+            <div
+              ref={branchScrollRef}
+              data-testid="branches-scroll-container"
+              className="flex items-center gap-1.5 overflow-x-auto scroll-smooth w-[430px] max-w-[calc(100vw-240px)] select-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            >
+              <button
+                onClick={() => setSelectedBranch(null)}
+                data-testid="branch-tab-all"
+                className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer shrink-0 whitespace-nowrap text-xs ${
+                  selectedBranch === null
+                    ? 'bg-[#2563EB] text-white shadow-xs font-semibold'
+                    : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
+                }`}
+              >
+                All Branches
+              </button>
+              {members.length > 0 &&
+                branches.map((b) => (
+                  <button
+                    key={b.id}
+                    data-testid={`branch-tab-${b.id}`}
+                    onClick={() => setSelectedBranch(b.id)}
+                    className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer shrink-0 whitespace-nowrap text-xs ${
+                      selectedBranch === b.id
+                        ? 'bg-[#2563EB] text-white shadow-xs font-semibold'
+                        : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
+                    }`}
+                  >
+                    {b.name}
+                  </button>
+                ))}
+            </div>
+
+            {/* Scroll Right Button */}
+            <button
+              type="button"
+              data-testid="branch-scroll-right-button"
+              onClick={() => handleScrollBranches('right')}
+              aria-label="Scroll branches right"
+              title="Scroll branches right"
+              className="p-1 rounded-lg text-[#64748B] hover:text-[#2563EB] hover:bg-[#F1F5F9] transition-colors cursor-pointer shrink-0"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           {/* Search & Jump with Dropdown */}
@@ -1598,14 +1644,13 @@ const FamilyTreeInner: React.FC = () => {
               }
               setIsMemoriesSidebarOpen((prev) => !prev);
             }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl font-semibold text-xs transition-all cursor-pointer shadow-xs ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold text-xs transition-all cursor-pointer shadow-xs ${
               isMemoriesSidebarOpen
                 ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white ring-2 ring-indigo-200 shadow-sm'
                 : 'bg-white hover:bg-slate-50 text-[#1E293B] border border-slate-300 hover:border-slate-400'
             }`}
             title="Toggle Memories Sidebar (Photos, Videos, Audios & Media)"
           >
-            <Sparkles className={`w-3.5 h-3.5 ${isMemoriesSidebarOpen ? 'text-amber-300 animate-pulse' : 'text-indigo-600'}`} />
             <span>Memories</span>
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
@@ -1725,10 +1770,9 @@ const FamilyTreeInner: React.FC = () => {
             type="button"
             data-testid="floating-memories-tab-button"
             onClick={() => setIsMemoriesSidebarOpen(true)}
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-20 flex items-center gap-1.5 bg-gradient-to-b from-blue-600 via-indigo-600 to-purple-600 text-white py-3 px-2 rounded-l-2xl shadow-xl hover:px-2.5 transition-all cursor-pointer group"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-20 flex items-center justify-center bg-gradient-to-b from-blue-600 via-indigo-600 to-purple-600 text-white py-3 px-2 rounded-l-2xl shadow-xl hover:px-2.5 transition-all cursor-pointer group"
             title="Open Family Memories Sidebar (Photos, Videos, Audios & Media)"
           >
-            <Sparkles className="w-4 h-4 text-amber-300 group-hover:scale-110 transition-transform" />
             <span className="[writing-mode:vertical-rl] text-[11px] font-bold tracking-wider select-none py-1">
               Memories ({memories.length})
             </span>
@@ -1804,8 +1848,8 @@ const FamilyTreeInner: React.FC = () => {
 
                 {editingPhotoMemberId === activeDrawerMember.id && (
                   <div
-                    style={{ backgroundColor: '#FFF9D6' }}
-                    className="mt-3 w-full p-3 rounded-xl border-[1.5px] border-[#B8D4FF] bg-[#FFF9D6] text-left text-xs space-y-2 text-[#17233C]"
+                    style={{ backgroundColor: 'rgb(255, 255, 30)' }}
+                    className="mt-3 w-full p-3 rounded-xl border-[1.5px] border-[#B8D4FF] bg-[rgb(255,255,30)] text-left text-xs space-y-2 text-[#17233C]"
                   >
                     <label className="font-semibold text-[#17233C] block">
                       Direct Photo URL
@@ -2180,8 +2224,8 @@ const FamilyTreeInner: React.FC = () => {
                                 {spouseRel && editingSpouseRelId === spouseRel.id && (
                                   <div
                                     onClick={(e) => e.stopPropagation()}
-                                    style={{ backgroundColor: '#FFF9D6' }}
-                                    className="p-2.5 rounded-xl border-[1.5px] border-[#B8D4FF] bg-[#FFF9D6] text-xs space-y-2 shadow-xs text-[#17233C]"
+                                    style={{ backgroundColor: 'rgb(255, 255, 30)' }}
+                                    className="p-2.5 rounded-xl border-[1.5px] border-[#B8D4FF] bg-[rgb(255,255,30)] text-xs space-y-2 shadow-xs text-[#17233C]"
                                   >
                                     <div className="flex items-center justify-between">
                                       <span className="font-bold text-[11px] text-[#17233C]">

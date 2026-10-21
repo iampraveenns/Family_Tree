@@ -12,7 +12,6 @@ import {
   Loader2,
   Sparkles,
   ArrowRight,
-  Folder,
   Mic,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -44,9 +43,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
     checkDuplicateMedia,
     openDetail,
     fetchMemories,
-    fetchCollections,
     fetchStats,
-    collections,
   } = useMemoryStore();
   const { success: showToastSuccess, error: showToastError } = useToastStore();
 
@@ -57,7 +54,6 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
   const [description, setDescription] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [location, setLocation] = useState('');
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string>('');
   const [dragActive, setDragActive] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -69,13 +65,6 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Load collections if not already present
-  useEffect(() => {
-    if (familyId && (!collections || collections.length === 0)) {
-      fetchCollections(familyId);
-    }
-  }, [familyId]);
 
   // Initialize or reset when member or open state changes
   useEffect(() => {
@@ -90,25 +79,8 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
       setFileType(null);
       setFormError(null);
       setDuplicateWarning(null);
-
-      // Auto-suggest collection if member matches
-      if (collections && collections.length > 0) {
-        if (member.generation && member.generation <= 2) {
-          const grandCol = collections.find((c) =>
-            c.title.toLowerCase().includes('grand')
-          );
-          if (grandCol) {
-            setSelectedCollectionId(grandCol.id);
-            return;
-          }
-        }
-        // default to first collection or empty
-        setSelectedCollectionId(collections[0]?.id || '');
-      } else {
-        setSelectedCollectionId('');
-      }
     }
-  }, [isOpen, member, collections]);
+  }, [isOpen, member]);
 
   // Clean up object URLs
   useEffect(() => {
@@ -197,7 +169,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mediaFile) {
-      setFormError('Please choose a photo or video to upload.');
+      setFormError('Please choose a photo, video, or audio file to upload.');
       return;
     }
 
@@ -221,7 +193,6 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
         visibility: 'FAMILY' as const,
         memberIds: [member.id],
         branchIds: member.branchId ? [member.branchId] : undefined,
-        collectionId: selectedCollectionId || undefined,
       };
 
       const result = await createMemory(familyId, payload, mediaFile);
@@ -230,10 +201,9 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
         showToastSuccess(
           `Memory successfully uploaded for ${memberFullName}! Visible now in the Memories section.`
         );
-        // Refresh memory store and collections so it immediately updates in the Memories tab
+        // Refresh memory store and stats so it immediately updates in the Memories tab
         await Promise.all([
           fetchMemories(familyId),
-          fetchCollections(familyId),
           fetchStats(familyId),
         ]);
         onSuccess?.();
@@ -261,10 +231,10 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
           </div>
           <div>
             <h3 className="text-base font-bold text-[#17233C] leading-snug">
-              Upload Memories for {memberFullName}
+              Add Memories
             </h3>
             <p className="text-[11px] text-[#475569] font-normal">
-              Photos & videos will be permanently preserved and visible in the Memories section
+              Preserve photos, videos, and audios for {memberFullName} in family archives
             </p>
           </div>
         </div>
@@ -275,16 +245,6 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
       style={{ backgroundColor: '#FFF9D6', color: '#17233C' }}
     >
       <form onSubmit={handleSubmit} className="space-y-4 pt-1" noValidate={false}>
-        {/* Banner about visibility in Memories Section */}
-        <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-[#FEF08A]/45 border border-[#FDE047] text-[#854D0E] text-xs">
-          <ImageIcon className="w-4 h-4 text-[#D97706] shrink-0 mt-0.5" />
-          <div className="flex-1 text-[11.5px] leading-relaxed">
-            <span className="font-semibold">Preserve in Family Memories:</span> Media uploaded here is tagged directly to{' '}
-            <strong className="font-semibold text-[#17233C]">{memberFullName}</strong> and will appear in the{' '}
-            <span className="font-semibold text-[#2563EB]">Memories section</span> and collections for all family members to view.
-          </div>
-        </div>
-
         {formError && (
           <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
             {formError}
@@ -294,7 +254,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
         {/* File Drag & Drop / Upload Area */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-[#17233C] flex items-center justify-between">
-            <span>Select Photo or Video <span className="text-red-500">*</span></span>
+            <span>Select Photo, Video, or Audio <span className="text-red-500">*</span></span>
             {mediaFile && (
               <span className="text-[10px] text-[#64748B] font-normal">
                 {(mediaFile.size / (1024 * 1024)).toFixed(2)} MB
@@ -401,7 +361,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                   <Upload className="w-5 h-5" />
                 </div>
                 <p className="text-xs text-[#17233C] font-medium">
-                  Drag and drop a photo or video here, or{' '}
+                  Drag and drop photos, videos, or audios here, or{' '}
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -411,7 +371,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                   </button>
                 </p>
                 <p className="text-[10px] text-[#64748B] mt-1">
-                  Supports JPEG, PNG, WebP, GIF, MP4, WebM, MOV up to 50MB
+                  Supports photos, videos, and audios (JPEG, PNG, WebP, GIF, MP4, WebM, MOV, MP3, WAV, etc.) up to 50MB
                 </p>
               </div>
             )}
@@ -421,7 +381,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
               type="file"
               className="hidden"
               onChange={handleFileInputChange}
-              accept="image/*,video/*"
+              accept="image/*,video/*,audio/*"
             />
           </div>
         </div>
@@ -444,16 +404,16 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
         {/* Date and Location (2 columns) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-[#17233C] flex items-center gap-1">
+            <label htmlFor="memory-event-date" className="text-xs font-semibold text-[#17233C] flex items-center gap-1">
               <Calendar className="w-3 h-3 text-[#64748B]" />
-              <span>Date or Year (Optional)</span>
+              <span>Date</span>
             </label>
             <input
-              type="text"
+              id="memory-event-date"
+              type="date"
               value={eventDate}
               onChange={(e) => setEventDate(e.target.value)}
-              placeholder="e.g. 1984, or 15 Aug 1990"
-              className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none"
+              className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none cursor-pointer"
             />
           </div>
 
@@ -472,32 +432,6 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
           </div>
         </div>
 
-        {/* Collection Inclusion */}
-        {collections && collections.length > 0 && (
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-[#17233C] flex items-center justify-between">
-              <span className="flex items-center gap-1">
-                <Folder className="w-3.5 h-3.5 text-[#2563EB]" />
-                <span>Heritage Collection</span>
-              </span>
-              <span className="text-[10px] text-[#64748B] font-normal">
-                Includes in Memories Collections
-              </span>
-            </label>
-            <select
-              value={selectedCollectionId}
-              onChange={(e) => setSelectedCollectionId(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] bg-white/95 text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none"
-            >
-              <option value="">General Family Memories</option>
-              {collections.map((col) => (
-                <option key={col.id} value={col.id}>
-                  {col.title} ({col.memoryCount || (col.memoryIds?.length || 0)} items)
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
 
         {/* Description / Story text */}
         <div className="space-y-1">
@@ -538,7 +472,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
             ) : (
               <>
                 <Upload className="w-3.5 h-3.5" />
-                <span>Upload & Save to Memories</span>
+                <span>Add to Memories</span>
               </>
             )}
           </Button>

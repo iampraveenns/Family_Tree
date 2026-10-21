@@ -3,6 +3,7 @@ import { Family, FamilyMember, FamilyBranch, Memory, FamilyEvent, Relationship }
 import { authenticatedFetch } from '../utils/api.ts';
 import { useMemoryStore } from './useMemoryStore.ts';
 import { useTimelineStore } from './useTimelineStore.ts';
+import { resolveDynamicBranches } from '../utils/branchUtils.ts';
 
 export const STORAGE_ACTIVE_FAMILY_KEY = 'familyroots_active_family_id';
 
@@ -455,11 +456,46 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         })
       );
 
+      const resolvedMembers = resolveDynamicBranches(mappedMembers, mappedRelationships);
+
+      // Collect all unique branches from resolved members to ensure mappedBranches includes them
+      const dynamicBranchMap = new Map<string, FamilyBranch>();
+      mappedBranches.forEach((b) => dynamicBranchMap.set(b.name, b));
+
+      const branchColors = ['#059669', '#0284c7', '#d97706', '#6366f1', '#e11d48', '#8b5cf6', '#0d9488'];
+      let colorIdx = mappedBranches.length;
+
+      resolvedMembers.forEach((m) => {
+        if (m.branchName && !dynamicBranchMap.has(m.branchName)) {
+          const color = branchColors[colorIdx % branchColors.length];
+          colorIdx++;
+          const bSlug = m.branchId || `branch-${m.branchName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+          const newBranch: FamilyBranch = {
+            id: bSlug,
+            familyId: mappedFamily.id,
+            name: m.branchName,
+            description: `${m.branchName} of ${mappedFamily.name}`,
+            rootMemberId: m.id,
+            rootMemberName: m.displayName,
+            memberCount: 1,
+            accentColor: color,
+          };
+          dynamicBranchMap.set(m.branchName, newBranch);
+        }
+      });
+
+      // Update memberCounts
+      dynamicBranchMap.forEach((branch) => {
+        branch.memberCount = resolvedMembers.filter((m) => m.branchName === branch.name).length;
+      });
+
+      const finalBranches = Array.from(dynamicBranchMap.values());
+
       set({
         activeFamilyId: mappedFamily.id,
         currentFamily: mappedFamily,
-        members: mappedMembers,
-        branches: mappedBranches,
+        members: resolvedMembers,
+        branches: finalBranches,
         relationships: mappedRelationships,
         isLoading: false,
         isLiveBackend: true,

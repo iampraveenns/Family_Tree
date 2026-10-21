@@ -76,7 +76,7 @@ export const RegisterPage: React.FC = () => {
           <GitFork className="w-7 h-7" />
         </div>
         <h1 className="text-3xl font-extrabold text-[#0F172A] tracking-tight">
-          FamilyRoots
+          FamilyTree
         </h1>
         <p className="text-sm text-[#64748B] mt-2">
           {isSignInMode

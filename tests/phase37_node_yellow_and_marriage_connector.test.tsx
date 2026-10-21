@@ -82,13 +82,13 @@ describe('Phase: Node UI - Minimal Marriage Connector & Butter #FEF3C7 Backgroun
 
     const html = renderToString(<HeritageMemberNode data={nodeData} />);
 
-    // Warm background #FFF9D6 and enlarged dimensions
-    expect(html).toContain('background-color:#FFF9D6');
+    // Background color (updated to rgb(255, 255, 30) per Phase 54) and enlarged dimensions
+    expect(html).toMatch(/background-color:\s*(rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
     expect(html).toContain('width:280px');
     expect(html).toContain('height:160px');
   });
 
-  it('3. HeritageMemberNode has #FFF9D6 background for deceased single member', () => {
+  it('3. HeritageMemberNode has background for deceased single member', () => {
     const nodeData: HeritageMemberNodeData = {
       member: memberDeceasedSingle,
       isSelected: false,
@@ -100,12 +100,12 @@ describe('Phase: Node UI - Minimal Marriage Connector & Butter #FEF3C7 Backgroun
 
     const html = renderToString(<HeritageMemberNode data={nodeData} />);
 
-    expect(html).toContain('background-color:#FFF9D6');
+    expect(html).toMatch(/background-color:\s*(rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
     expect(html).toContain('width:280px');
     expect(html).toContain('height:160px');
   });
 
-  it('4. Selected and hovered states maintain #FFF9D6 background while applying focus borders', () => {
+  it('4. Selected and hovered states maintain background while applying focus borders', () => {
     const nodeData: HeritageMemberNodeData = {
       member: memberLivingMarried,
       isSelected: true,
@@ -117,7 +117,7 @@ describe('Phase: Node UI - Minimal Marriage Connector & Butter #FEF3C7 Backgroun
 
     const html = renderToString(<HeritageMemberNode data={nodeData} />);
 
-    expect(html).toContain('background-color:#FFF9D6');
+    expect(html).toMatch(/background-color:\s*(rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
     expect(html).toContain('border-[#2563EB]');
   });
 });

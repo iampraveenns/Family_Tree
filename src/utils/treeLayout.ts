@@ -1,5 +1,6 @@
 import { Node, Edge, MarkerType, Position } from 'reactflow';
 import { FamilyMember, Relationship } from '../types/index.ts';
+import { resolveDynamicBranches } from './branchUtils.ts';
 
 export const NODE_WIDTH = 280;
 export const NODE_HEIGHT = 160;
@@ -87,11 +88,12 @@ export function calculateTreeLayout(
     generations: [],
   };
 
-  // Strictly filter members to valid, real FamilyMember records
-  const validMembers = (members || []).filter(
+  // Strictly filter members to valid, real FamilyMember records and resolve dynamic branches
+  const rawValidMembers = (members || []).filter(
     (m): m is FamilyMember =>
       Boolean(m && typeof m === 'object' && m.id && typeof m.id === 'string' && m.firstName !== undefined)
   );
+  const validMembers = resolveDynamicBranches(rawValidMembers, relationships || []);
 
   // 1. EMPTY TREE CASE: FamilyMember count === 0
   if (validMembers.length === 0) {
