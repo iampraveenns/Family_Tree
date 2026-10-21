@@ -25,6 +25,7 @@ import {
   ImageIcon,
   Camera,
   Pencil,
+  Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFamilyStore } from '../../stores/useFamilyStore.ts';
@@ -50,6 +51,8 @@ import { EditLifeStatusModal } from '../../components/genealogy/EditLifeStatusMo
 import { CreateFamilyModal } from '../../components/genealogy/CreateFamilyModal.tsx';
 import { ProfilePhotoLightboxModal } from '../../components/genealogy/ProfilePhotoLightboxModal.tsx';
 import { UploadNodeMemoryModal } from '../../components/genealogy/UploadNodeMemoryModal.tsx';
+import { MemoriesSidePanel } from '../../components/genealogy/MemoriesSidePanel.tsx';
+import { formatFamilyDisplayName } from '../../utils/mediaUtils.ts';
 import { calculateTreeLayout } from '../../utils/treeLayout.ts';
 
 // Registered React Flow Custom Nodes
@@ -91,6 +94,8 @@ const FamilyTreeInner: React.FC = () => {
   const [showHint, setShowHint] = useState(true);
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const [isCreateFamilyOpen, setIsCreateFamilyOpen] = useState(false);
+  const [isFamilyVaultDropdownOpen, setIsFamilyVaultDropdownOpen] = useState(false);
+  const [isMemoriesSidebarOpen, setIsMemoriesSidebarOpen] = useState(false);
 
   const { memories, fetchMemories } = useMemoryStore();
   const { events, fetchTimeline } = useTimelineStore();
@@ -125,6 +130,10 @@ const FamilyTreeInner: React.FC = () => {
 
   const handleSaveSpouseMarriageDate = async (relationshipId: string, newDate: string) => {
     try {
+      if (!newDate || !newDate.trim()) {
+        toastError('Marriage date (DOM) is compulsory for a spouse.');
+        return;
+      }
       setIsUpdatingSpouseRel(true);
       const famId = currentFamily?.id || activeFamilyId;
       if (!famId) throw new Error('No active family vault selected');
@@ -164,26 +173,55 @@ const FamilyTreeInner: React.FC = () => {
   };
 
   const handleOpenEditModal = useCallback((member: FamilyMember) => {
-    setEditModalMember(member);
+    const fresh =
+      members.find((m) => m.id === member.id) ||
+      members.find(
+        (m) =>
+          m.firstName.toLowerCase() === member.firstName.toLowerCase() &&
+          m.lastName.toLowerCase() === member.lastName.toLowerCase()
+      ) ||
+      member;
+    setEditModalMember(fresh);
     setIsEditModalOpen(true);
     setShowHint(false);
-  }, []);
+  }, [members]);
 
   // Dedicated Member Memory Upload Modal from Family Tree Nodes
   const [memoryUploadMember, setMemoryUploadMember] = useState<FamilyMember | null>(null);
   const [isMemoryUploadModalOpen, setIsMemoryUploadModalOpen] = useState(false);
 
-  const handleOpenUploadMemoryModal = useCallback((member: FamilyMember) => {
-    setMemoryUploadMember(member);
+  const handleOpenUploadMemoryModal = useCallback((member?: FamilyMember | null) => {
+    const target = member || selectedMember || members[0] || null;
+    setMemoryUploadMember(target);
     setIsMemoryUploadModalOpen(true);
     setShowHint(false);
-  }, []);
+  }, [selectedMember, members]);
 
   const handleEditMemberSubmit = useCallback(
     async (memberId: string, data: Partial<MemberFormData>) => {
       try {
         setIsUpdatingMember(true);
-        const famId = currentFamily?.id || activeFamilyId;
+        const currentMembers = useFamilyStore.getState().members;
+        const availableFamilies = useFamilyStore.getState().availableFamilies;
+        const currentFam = useFamilyStore.getState().currentFamily;
+        const activeFamId = useFamilyStore.getState().activeFamilyId;
+
+        // Resolve member and its true familyId
+        const match =
+          currentMembers.find((m) => m.id === memberId) ||
+          currentMembers.find(
+            (m) =>
+              m.firstName.toLowerCase() === (data.firstName || editModalMember?.firstName || '').toLowerCase() &&
+              m.lastName.toLowerCase() === (data.lastName || editModalMember?.lastName || '').toLowerCase()
+          ) ||
+          editModalMember;
+
+        let targetMemberId = match?.id || memberId;
+        let famId = match?.familyId || currentFam?.id || activeFamId;
+
+        if (!famId && availableFamilies.length > 0) {
+          famId = availableFamilies[0].id;
+        }
         if (!famId) throw new Error('No active family vault selected');
 
         const hasDeathDate = Boolean(data.deathDate && data.deathDate.trim());
@@ -206,13 +244,41 @@ const FamilyTreeInner: React.FC = () => {
           branchIds: data.branchId ? [data.branchId] : [],
         };
 
-        const res = await authenticatedFetch(`/api/families/${famId}/members/${memberId}`, {
+        let res = await authenticatedFetch(`/api/families/${famId}/members/${targetMemberId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
 
-        const json = await res.json().catch(() => null);
+        let json = await res.json().catch(() => null);
+
+        // Auto-heal if stale member ID or family ID mismatch: refresh tree and retry once
+        if (!res.ok && (res.status === 404 || json?.message?.includes('does not exist in family'))) {
+          await fetchFamilyTree();
+          const freshMembers = useFamilyStore.getState().members;
+          const freshFamily = useFamilyStore.getState().currentFamily;
+          const freshFamId = freshFamily?.id || useFamilyStore.getState().activeFamilyId || famId;
+
+          const freshMatch =
+            freshMembers.find((m) => m.id === targetMemberId) ||
+            freshMembers.find(
+              (m) =>
+                m.firstName.toLowerCase() === (data.firstName || editModalMember?.firstName || '').toLowerCase() &&
+                m.lastName.toLowerCase() === (data.lastName || editModalMember?.lastName || '').toLowerCase()
+            );
+
+          if (freshMatch) {
+            targetMemberId = freshMatch.id;
+            const retryFamId = freshMatch.familyId || freshFamId;
+            res = await authenticatedFetch(`/api/families/${retryFamId}/members/${targetMemberId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            json = await res.json().catch(() => null);
+          }
+        }
+
         if (!res.ok || !json?.success) {
           throw new Error(json?.message || json?.error?.message || 'Failed to update member profile');
         }
@@ -644,11 +710,13 @@ const FamilyTreeInner: React.FC = () => {
           },
           onOpenProfile: (m: FamilyMember) => {
             // Profile opening ONLY via eye icon (Requirements 1, 2, 9)
+            setIsMemoriesSidebarOpen(false);
             setDrawerMember(m);
             setDrawerTab('profile');
             setShowHint(false);
           },
           onExploreKinship: (m: FamilyMember) => {
+            setIsMemoriesSidebarOpen(false);
             setDrawerMember(m);
             setDrawerTab('kinship');
             setShowHint(false);
@@ -1284,7 +1352,10 @@ const FamilyTreeInner: React.FC = () => {
         relPayload.displayOrder = nextChildOrder;
       }
 
-      if (rType === 'SPOUSE' && formData.marriageDate) {
+      if (rType === 'SPOUSE') {
+        if (!formData.marriageDate || !formData.marriageDate.trim()) {
+          throw new Error('Marriage date (DOM) is compulsory when adding a spouse.');
+        }
         relPayload.marriageDate = formData.marriageDate.trim();
       }
 
@@ -1351,13 +1422,54 @@ const FamilyTreeInner: React.FC = () => {
       {/* Top Header & Canvas Filters Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-2xl sm:text-[28px] font-bold text-[#17233C] tracking-tight">
-              Family Tree
-            </h2>
+          <div className="flex items-center gap-2.5 relative">
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-2xl sm:text-[28px] font-bold text-[#17233C] tracking-tight" data-testid="family-heading-name">
+                {formatFamilyDisplayName(currentFamily?.name)}
+              </h2>
+              {availableFamilies.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setIsFamilyVaultDropdownOpen((prev) => !prev)}
+                  className="p-1 rounded-lg text-slate-500 hover:text-[#2563EB] hover:bg-blue-50 transition-colors cursor-pointer"
+                  title="Switch family vault"
+                  aria-label="Switch family vault"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              )}
+            </div>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#EFF6FF] text-[#2563EB] border-[1.5px] border-[#93C5FD]">
               {members.length} {members.length === 1 ? 'Relative' : 'Relatives'}
             </span>
+
+            {isFamilyVaultDropdownOpen && availableFamilies.length > 1 && (
+              <div className="absolute left-0 top-full mt-1.5 w-60 rounded-xl bg-white border border-[#E2E8F0] shadow-lg py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-3 py-1 text-[10px] uppercase font-bold text-slate-400">
+                  Switch Family Vault
+                </div>
+                {availableFamilies.map((fam) => (
+                  <button
+                    key={fam.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveFamilyId(fam.id);
+                      setIsFamilyVaultDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-1.5 text-xs font-medium flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
+                      fam.id === (activeFamilyId || currentFamily?.id)
+                        ? 'text-[#2563EB] font-bold bg-blue-50/50'
+                        : 'text-slate-700'
+                    }`}
+                  >
+                    <span className="truncate">{fam.name}</span>
+                    {fam.id === (activeFamilyId || currentFamily?.id) && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <p className="text-xs text-[#475569] mt-0.5 font-normal">
             Pedigree lineage graph with generation alignment & spouse pairings
@@ -1474,6 +1586,35 @@ const FamilyTreeInner: React.FC = () => {
           >
             {members.length === 0 ? 'Add Root Ancestor' : 'Add Relative'}
           </Button>
+
+          {/* Ask Gemini Style Family Memories Sidebar Toggle Button */}
+          <button
+            type="button"
+            data-testid="toggle-memories-sidebar-button"
+            onClick={() => {
+              if (activeDrawerMember) {
+                setDrawerMember(null);
+                setSelectedMember(null);
+              }
+              setIsMemoriesSidebarOpen((prev) => !prev);
+            }}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl font-semibold text-xs transition-all cursor-pointer shadow-xs ${
+              isMemoriesSidebarOpen
+                ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white ring-2 ring-indigo-200 shadow-sm'
+                : 'bg-white hover:bg-slate-50 text-[#1E293B] border border-slate-300 hover:border-slate-400'
+            }`}
+            title="Toggle Memories Sidebar (Photos, Videos, Audios & Media)"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${isMemoriesSidebarOpen ? 'text-amber-300 animate-pulse' : 'text-indigo-600'}`} />
+            <span>Memories</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                isMemoriesSidebarOpen ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-700'
+              }`}
+            >
+              {memories.length}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -1574,8 +1715,24 @@ const FamilyTreeInner: React.FC = () => {
                 : undefined
             }
             onClearFocus={isFocusMode || selectedMember ? handleClearFocus : undefined}
-            isDrawerOpen={Boolean(activeDrawerMember)}
+            isDrawerOpen={Boolean(activeDrawerMember) || isMemoriesSidebarOpen}
           />
+        )}
+
+        {/* Ask Gemini style floating side trigger tab */}
+        {!isMemoriesSidebarOpen && !activeDrawerMember && (
+          <button
+            type="button"
+            data-testid="floating-memories-tab-button"
+            onClick={() => setIsMemoriesSidebarOpen(true)}
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-20 flex items-center gap-1.5 bg-gradient-to-b from-blue-600 via-indigo-600 to-purple-600 text-white py-3 px-2 rounded-l-2xl shadow-xl hover:px-2.5 transition-all cursor-pointer group"
+            title="Open Family Memories Sidebar (Photos, Videos, Audios & Media)"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300 group-hover:scale-110 transition-transform" />
+            <span className="[writing-mode:vertical-rl] text-[11px] font-bold tracking-wider select-none py-1">
+              Memories ({memories.length})
+            </span>
+          </button>
         )}
 
         {/* Quick Inspect Member Detail Drawer with 5 organized sections */}
@@ -2038,32 +2195,28 @@ const FamilyTreeInner: React.FC = () => {
                                       onChange={(e) => setSpouseMarriageDateInput(e.target.value)}
                                       className="w-full rounded-lg border-[1.5px] border-[#CBD5E1] bg-white px-2 py-1 text-xs text-[#0F172A] outline-none focus:ring-1 focus:ring-[#2563EB]"
                                     />
-                                    <div className="flex items-center justify-between pt-0.5">
+                                    <div className="flex items-center justify-end gap-1.5 pt-0.5">
                                       <button
                                         type="button"
-                                        disabled={isUpdatingSpouseRel}
-                                        onClick={() => handleSaveSpouseMarriageDate(spouseRel.id, '')}
-                                        className="text-[11px] text-red-600 hover:underline cursor-pointer"
+                                        onClick={() => setEditingSpouseRelId(null)}
+                                        className="px-2 py-1 rounded-md text-[11px] text-[#64748B] hover:bg-slate-100 cursor-pointer"
                                       >
-                                        Remove Date
+                                        Cancel
                                       </button>
-                                      <div className="flex items-center gap-1.5">
-                                        <button
-                                          type="button"
-                                          onClick={() => setEditingSpouseRelId(null)}
-                                          className="px-2 py-1 rounded-md text-[11px] text-[#64748B] hover:bg-slate-100 cursor-pointer"
-                                        >
-                                          Cancel
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={isUpdatingSpouseRel}
-                                          onClick={() => handleSaveSpouseMarriageDate(spouseRel.id, spouseMarriageDateInput)}
-                                          className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#2563EB] hover:bg-[#1D4ED8] text-white cursor-pointer transition-colors shadow-2xs"
-                                        >
-                                          {isUpdatingSpouseRel ? 'Saving...' : 'Save DOM'}
-                                        </button>
-                                      </div>
+                                      <button
+                                        type="button"
+                                        disabled={isUpdatingSpouseRel || !spouseMarriageDateInput.trim()}
+                                        onClick={() => {
+                                          if (!spouseMarriageDateInput.trim()) {
+                                            toastError('Marriage date (DOM) is compulsory for a spouse.');
+                                            return;
+                                          }
+                                          handleSaveSpouseMarriageDate(spouseRel.id, spouseMarriageDateInput);
+                                        }}
+                                        className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#2563EB] hover:bg-[#1D4ED8] text-white cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
+                                      >
+                                        {isUpdatingSpouseRel ? 'Saving...' : 'Save DOM'}
+                                      </button>
                                     </div>
                                   </div>
                                 )}
@@ -2349,6 +2502,27 @@ const FamilyTreeInner: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Ask Gemini Style Right Sidebar: Family Memories, Photos, Videos, Audios & Media Information */}
+        <MemoriesSidePanel
+          isOpen={isMemoriesSidebarOpen}
+          onClose={() => setIsMemoriesSidebarOpen(false)}
+          memories={memories}
+          members={members}
+          familyName={formatFamilyDisplayName(currentFamily?.name)}
+          onSelectMember={(memberId) => {
+            handleJumpToMember(memberId);
+          }}
+          onOpenUploadModal={() => {
+            handleOpenUploadMemoryModal(null);
+          }}
+          onRefreshMemories={() => {
+            const famId = currentFamily?.id || activeFamilyId;
+            if (famId) {
+              fetchMemories(famId);
+            }
+          }}
+        />
       </div>
 
       {/* Add Relative / Relationship Modal */}

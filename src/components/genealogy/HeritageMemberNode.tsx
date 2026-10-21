@@ -675,7 +675,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
                 </>
               )}
 
-              {/* 3. DOM & DOD fields */}
+              {/* 3. DOM & DOD fields (DOM displayed in same #17233C color as Location & DOB) */}
               {dateRows
                 .filter((r) => r.label !== 'DOB')
                 .map((row, idx) => (
@@ -685,7 +685,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
                     className={`truncate whitespace-nowrap ${
                       row.label === 'DOD'
                         ? 'text-[#64748B]'
-                        : 'text-[#2563EB]'
+                        : 'text-[#17233C]'
                     }`}
                     title={row.text}
                   >

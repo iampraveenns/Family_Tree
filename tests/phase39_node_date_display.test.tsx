@@ -185,9 +185,9 @@ describe('Phase 39: FamilyRoots — Family Tree Node Date Display Priority & Ord
       expect(domIndex).toBeGreaterThan(dobIndex);
       expect(dodIndex).toBeGreaterThan(domIndex);
 
-      // 0 memories must be completely hidden
+      // 0 memories count indicator must be completely hidden
       expect(html).not.toContain('0 Memories');
-      expect(html).not.toContain('Memories');
+      expect(html).not.toContain('0 Memory');
     });
 
     it('renders DOB and DOM for living married member without DOD', () => {

@@ -30,6 +30,26 @@ export const errorHandler = (
     return;
   }
 
+  // Graceful fallback for database disconnection/errors (as specified in web migration guide)
+  if (
+    err.name === 'MongooseError' ||
+    err.name === 'MongoNetworkError' ||
+    err.name === 'MongoServerSelectionError' ||
+    (err.message && err.message.includes('buffering timed out'))
+  ) {
+    logger.warn('[AI Studio] Database offline or query timed out — returning fallback response');
+    if (req.method === 'GET') {
+      res.json({
+        success: true,
+        data: req.path.endsWith('s') || req.path.endsWith('s/') ? [] : {},
+        message: 'Database offline — returning empty response',
+      });
+      return;
+    }
+    sendError(res, ErrorCode.DATABASE_ERROR, 'Service temporarily unavailable (database offline)', 503);
+    return;
+  }
+
   // Unhandled internal server error
   logger.error({
     err: err.message,

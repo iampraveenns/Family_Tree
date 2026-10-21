@@ -51,9 +51,9 @@ router.patch('/:memoryId', requireAuthentication, async (req, res, next) => {
   }
 });
 
-router.delete('/:memoryId', requireAuthentication, async (req, res, next) => {
+router.delete('/:memoryId', requireAuthentication, async (req: any, res, next) => {
   try {
-    const memory = await memoryRepository.findById(req.params.memoryId);
+    const memory = await memoryRepository.findById(req.params.memoryId as string);
     if (!memory) throw new NotFoundError('Memory not found');
     req.params.familyId = memory.familyId.toString();
     memoryController.deleteMemory(req, res, next);
@@ -62,9 +62,9 @@ router.delete('/:memoryId', requireAuthentication, async (req, res, next) => {
   }
 });
 
-router.post('/:memoryId/media', requireAuthentication, upload.single('file'), async (req, res, next) => {
+router.post('/:memoryId/media', requireAuthentication, upload.single('file') as any, async (req: any, res, next) => {
   try {
-    const memory = await memoryRepository.findById(req.params.memoryId);
+    const memory = await memoryRepository.findById(req.params.memoryId as string);
     if (!memory) throw new NotFoundError('Memory not found');
     req.params.familyId = memory.familyId.toString();
     memoryController.uploadMedia(req, res, next);
@@ -73,9 +73,9 @@ router.post('/:memoryId/media', requireAuthentication, upload.single('file'), as
   }
 });
 
-router.get('/:memoryId/media', requireAuthentication, async (req, res, next) => {
+router.get('/:memoryId/media', requireAuthentication, async (req: any, res, next) => {
   try {
-    const memory = await memoryRepository.findById(req.params.memoryId);
+    const memory = await memoryRepository.findById(req.params.memoryId as string);
     if (!memory) throw new NotFoundError('Memory not found');
     req.params.familyId = memory.familyId.toString();
     memoryController.getMemoryMedia(req, res, next);

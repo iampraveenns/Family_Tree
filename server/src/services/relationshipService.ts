@@ -65,7 +65,17 @@ export class RelationshipService {
       );
     }
 
-    // 4. Validate duplicate relationships based on symmetry and direction (Section 7)
+    // 4. Compulsory marriageDate validation for spouse relationships
+    if (relationshipType === RelationshipType.SPOUSE) {
+      if (input.marriageDate !== undefined && (!input.marriageDate || !input.marriageDate.trim())) {
+        throw new ValidationError('Marriage date (DOM) is compulsory when adding a spouse.', {
+          code: ErrorCode.VALIDATION_ERROR,
+          field: 'marriageDate',
+        });
+      }
+    }
+
+    // 5. Validate duplicate relationships based on symmetry and direction (Section 7)
     const isSymmetric =
       relationshipType === RelationshipType.SPOUSE ||
       relationshipType === RelationshipType.SIBLING ||

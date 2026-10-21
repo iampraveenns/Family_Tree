@@ -109,3 +109,18 @@ export function getMemoryCoverUrl(memory: Memory | any): string | null {
 
   return null;
 }
+
+/**
+ * Formats a family name to the canonical format (e.g. "Pattara Family", "Sikawath Family").
+ */
+export function formatFamilyDisplayName(rawName?: string | null): string {
+  if (!rawName || !rawName.trim()) return 'Pattara family';
+  const clean = rawName.trim();
+  if (clean.toLowerCase() === 'family vault') return 'Family Vault';
+  if (/family$/i.test(clean)) {
+    const base = clean.replace(/family$/i, '').trim();
+    if (!base) return 'Family';
+    return `${base.charAt(0).toUpperCase() + base.slice(1)} family`;
+  }
+  return `${clean.charAt(0).toUpperCase() + clean.slice(1)} family`;
+}

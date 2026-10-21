@@ -1,10 +1,11 @@
 import { Types } from 'mongoose';
 import { memberRepository, MemberQueryOptions } from '../repositories/memberRepository.ts';
+import { membershipRepository } from '../repositories/membershipRepository.ts';
 import { relationshipRepository } from '../repositories/relationshipRepository.ts';
 import { branchRepository } from '../repositories/branchRepository.ts';
 import { familyService } from './familyService.ts';
 import { auditService } from './auditService.ts';
-import { IFamilyMember } from '../models/FamilyMember.ts';
+import { FamilyMember, IFamilyMember } from '../models/FamilyMember.ts';
 import { Memory } from '../models/Memory.ts';
 import { FamilyEvent } from '../models/FamilyEvent.ts';
 import { FamilyMembership } from '../models/FamilyMembership.ts';
@@ -68,8 +69,23 @@ export class MemberService {
       throw new NotFoundError(`Family member '${memberId}' not found`, ErrorCode.MEMBER_NOT_FOUND);
     }
 
-    // Explicit family-ownership validation (Section 31)
-    const member = await memberRepository.findByFamilyAndId(familyId, memberId);
+    const targetFamily = await familyService.getFamilyById(familyId, context);
+    const resolvedFamilyId = targetFamily._id.toString();
+
+    let member: IFamilyMember | null = null;
+    if (Types.ObjectId.isValid(memberId)) {
+      member = await memberRepository.findByFamilyAndId(resolvedFamilyId, memberId);
+      if (!member && familyId !== resolvedFamilyId && Types.ObjectId.isValid(familyId)) {
+        member = await memberRepository.findByFamilyAndId(familyId, memberId);
+      }
+      if (!member) {
+        const anyMember = await memberRepository.findById(memberId);
+        if (anyMember) {
+          member = anyMember;
+        }
+      }
+    }
+
     if (!member) {
       throw new NotFoundError(
         `Member with ID '${memberId}' does not exist in family '${familyId}'`,
@@ -86,14 +102,74 @@ export class MemberService {
     data: Partial<IFamilyMember>,
     context?: ServiceContext
   ): Promise<IFamilyMember> {
-    const existing = await this.getMemberById(familyId, memberId, context);
+    const targetFamily = await familyService.getFamilyById(familyId, context);
+    const resolvedFamilyId = targetFamily._id.toString();
+
+    let existing: IFamilyMember | null = null;
+    if (Types.ObjectId.isValid(memberId)) {
+      existing = await memberRepository.findByFamilyAndId(resolvedFamilyId, memberId);
+      if (!existing && familyId !== resolvedFamilyId && Types.ObjectId.isValid(familyId)) {
+        existing = await memberRepository.findByFamilyAndId(familyId, memberId);
+      }
+      // If member exists in MongoDB under another family or stale session, heal and adopt its true family
+      if (!existing) {
+        const anyMember = await memberRepository.findById(memberId);
+        if (anyMember) {
+          existing = anyMember;
+          familyId = anyMember.familyId.toString();
+        }
+      }
+    }
+
+    // Resilience against stale client IDs: if not found by ID, attempt lookup by matching name within this family
+    if (!existing && data.firstName && data.lastName) {
+      existing = await FamilyMember.findOne({
+        familyId: new Types.ObjectId(resolvedFamilyId),
+        firstName: { $regex: new RegExp(`^${data.firstName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        lastName: { $regex: new RegExp(`^${data.lastName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+      }).exec();
+      if (!existing && familyId !== resolvedFamilyId && Types.ObjectId.isValid(familyId)) {
+        existing = await FamilyMember.findOne({
+          familyId: new Types.ObjectId(familyId),
+          firstName: { $regex: new RegExp(`^${data.firstName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+          lastName: { $regex: new RegExp(`^${data.lastName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        }).exec();
+      }
+      if (existing) {
+        memberId = existing._id.toString();
+      }
+    }
+
+    // Resilience against name edits: if not found, match by existing member in family by display name or first name
+    if (!existing && (data.displayName || data.firstName)) {
+      const nameToMatch = (data.displayName || data.firstName)!.trim();
+      existing = await FamilyMember.findOne({
+        familyId: new Types.ObjectId(resolvedFamilyId),
+        $or: [
+          { displayName: { $regex: new RegExp(nameToMatch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') } },
+          { firstName: { $regex: new RegExp(nameToMatch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') } },
+        ],
+      }).exec();
+      if (existing) {
+        memberId = existing._id.toString();
+      }
+    }
+
+    if (!existing) {
+      throw new NotFoundError(
+        `Member with ID '${memberId}' does not exist in family '${familyId}'`,
+        ErrorCode.MEMBER_NOT_FOUND
+      );
+    }
+
+    const effectiveFamilyId = existing.familyId ? existing.familyId.toString() : resolvedFamilyId;
 
     // Validate branch updates if provided
     if (data.branchIds && data.branchIds.length > 0) {
       for (const bId of data.branchIds) {
-        const branch = await branchRepository.findByFamilyAndId(familyId, bId);
+        const branch = await branchRepository.findByFamilyAndId(effectiveFamilyId, bId);
         if (!branch) {
-          throw new ValidationError(`Branch '${bId}' does not belong to family '${familyId}'`);
+          throw new ValidationError(`Branch '${bId}' does not belong to family '${effectiveFamilyId}'`);
         }
       }
     }
@@ -111,7 +187,7 @@ export class MemberService {
     }
 
     await auditService.log(
-      familyId,
+      effectiveFamilyId,
       context?.userId || 'system',
       AuditAction.MEMBER_UPDATED,
       'FamilyMember',

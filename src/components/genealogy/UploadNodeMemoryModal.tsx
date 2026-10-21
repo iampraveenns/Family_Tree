@@ -13,6 +13,7 @@ import {
   Sparkles,
   ArrowRight,
   Folder,
+  Mic,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { FamilyMember, MemoryType } from '../../types/index.ts';
@@ -51,7 +52,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
 
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [fileType, setFileType] = useState<'image' | 'video' | null>(null);
+  const [fileType, setFileType] = useState<'image' | 'video' | 'audio' | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [eventDate, setEventDate] = useState('');
@@ -125,9 +126,10 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
   const processSelectedFile = async (file: File) => {
     const isImage = file.type.startsWith('image/');
     const isVideo = file.type.startsWith('video/');
+    const isAudio = file.type.startsWith('audio/');
 
-    if (!isImage && !isVideo) {
-      setFormError('Please select a valid photo or video file (JPEG, PNG, WebP, MP4, MOV, WebM, etc.).');
+    if (!isImage && !isVideo && !isAudio) {
+      setFormError('Please select a valid photo, video, or audio file (JPEG, PNG, WebP, MP4, MOV, MP3, WAV, etc.).');
       return;
     }
 
@@ -138,7 +140,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
     const objectUrl = URL.createObjectURL(file);
     setMediaFile(file);
     setPreviewUrl(objectUrl);
-    setFileType(isImage ? 'image' : 'video');
+    setFileType(isImage ? 'image' : isVideo ? 'video' : 'audio');
     setFormError(null);
     setDuplicateWarning(null);
 
@@ -208,7 +210,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
       setIsSubmitting(true);
       setFormError(null);
 
-      const memoryType: MemoryType = fileType === 'video' ? 'PHOTO' : 'PHOTO';
+      const memoryType: MemoryType = fileType === 'audio' ? 'AUDIO' : 'PHOTO';
 
       const payload = {
         title: title.trim(),
@@ -321,13 +323,18 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                       alt="Upload preview"
                       className="max-h-56 w-auto object-contain mx-auto"
                     />
-                  ) : (
+                  ) : fileType === 'video' ? (
                     <video
                       src={previewUrl}
                       controls
                       playsInline
                       className="max-h-56 w-full object-contain bg-slate-100"
                     />
+                  ) : (
+                    <div className="p-6 flex flex-col items-center justify-center w-full">
+                      <Mic className="w-10 h-10 text-emerald-600 mb-2" />
+                      <audio src={previewUrl} controls className="w-full max-w-md" />
+                    </div>
                   )}
                   <button
                     type="button"
@@ -348,6 +355,8 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                   <div className="flex items-center gap-1.5 truncate">
                     {fileType === 'video' ? (
                       <Video className="w-4 h-4 text-[#2563EB] shrink-0" />
+                    ) : fileType === 'audio' ? (
+                      <Mic className="w-4 h-4 text-emerald-600 shrink-0" />
                     ) : (
                       <ImageIcon className="w-4 h-4 text-[#2563EB] shrink-0" />
                     )}
@@ -392,7 +401,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                   <Upload className="w-5 h-5" />
                 </div>
                 <p className="text-xs text-[#17233C] font-medium">
-                  Drag and drop a photo or video here, or{' '}
+                  Drag and drop a photo, video, or audio recording here, or{' '}
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -402,7 +411,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                   </button>
                 </p>
                 <p className="text-[10px] text-[#64748B] mt-1">
-                  Supports JPEG, PNG, WebP, GIF, MP4, WebM, MOV up to 50MB
+                  Supports JPEG, PNG, WebP, GIF, MP4, WebM, MOV, MP3, WAV up to 50MB
                 </p>
               </div>
             )}
@@ -412,7 +421,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
               type="file"
               className="hidden"
               onChange={handleFileInputChange}
-              accept="image/*,video/*"
+              accept="image/*,video/*,audio/*"
             />
           </div>
         </div>

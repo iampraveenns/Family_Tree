@@ -9,6 +9,7 @@ import {
   Minimize2,
   Map as MapIcon,
   X,
+  FolderHeart,
 } from 'lucide-react';
 
 export interface TreeFloatingControlsProps {
@@ -26,6 +27,9 @@ export interface TreeFloatingControlsProps {
   selectedMemberName?: string;
   onClearFocus?: () => void;
   isDrawerOpen?: boolean;
+  isMemoriesSidebarOpen?: boolean;
+  onToggleMemoriesSidebar?: () => void;
+  memoriesCount?: number;
 }
 
 export const TreeFloatingControls: React.FC<TreeFloatingControlsProps> = ({
@@ -43,6 +47,9 @@ export const TreeFloatingControls: React.FC<TreeFloatingControlsProps> = ({
   selectedMemberName,
   onClearFocus,
   isDrawerOpen = false,
+  isMemoriesSidebarOpen = false,
+  onToggleMemoriesSidebar,
+  memoriesCount,
 }) => {
   return (
     <>
@@ -50,7 +57,7 @@ export const TreeFloatingControls: React.FC<TreeFloatingControlsProps> = ({
       <div
         data-testid="tree-floating-controls"
         className={`absolute top-5 right-5 ${
-          isDrawerOpen ? 'sm:right-[436px]' : ''
+          isDrawerOpen || isMemoriesSidebarOpen ? 'sm:right-[445px]' : ''
         } z-35 flex items-center gap-1 p-1.5 rounded-xl bg-white border-[1.5px] border-[#B8D4FF] shadow-md transition-all duration-200 max-w-[calc(100vw-40px)] overflow-x-auto`}
       >
         {/* Zoom In */}
@@ -131,6 +138,39 @@ export const TreeFloatingControls: React.FC<TreeFloatingControlsProps> = ({
             </>
           )}
         </button>
+
+        {/* Memories Sidebar Toggle Button */}
+        {onToggleMemoriesSidebar && (
+          <>
+            <div className="w-[1.5px] h-4 bg-[#B8D4FF] shrink-0" />
+            <button
+              type="button"
+              onClick={onToggleMemoriesSidebar}
+              data-testid="toggle-memories-sidebar-button"
+              aria-label={isMemoriesSidebarOpen ? 'Close Memories Sidebar' : 'Open Memories Sidebar'}
+              title={isMemoriesSidebarOpen ? 'Close Memories Sidebar' : 'Open Memories Sidebar (Photos, Videos, Audios)'}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer shrink-0 ${
+                isMemoriesSidebarOpen
+                  ? 'bg-[#2563EB] text-white font-semibold shadow-xs'
+                  : 'text-[#475569] hover:text-[#2563EB] hover:bg-[#F1F5F9] active:bg-[#DBEAFE]'
+              }`}
+            >
+              <FolderHeart className={`w-3.5 h-3.5 ${isMemoriesSidebarOpen ? 'text-white' : 'text-[#2563EB]'}`} />
+              <span className="hidden sm:inline text-xs font-semibold">Memories</span>
+              {typeof memoriesCount === 'number' && memoriesCount > 0 && (
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    isMemoriesSidebarOpen
+                      ? 'bg-white/25 text-white'
+                      : 'bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE]'
+                  }`}
+                >
+                  {memoriesCount}
+                </span>
+              )}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Focus Mode Notification & Clear Focus (Requirement 10) */}

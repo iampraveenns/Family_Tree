@@ -303,8 +303,13 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
       return;
     }
 
-    if (relationshipType === 'SPOUSE' && !marriageDate.trim() && !editMember) {
-      setFormError('Marriage date is required when adding a spouse.');
+    if (relationshipType === 'SPOUSE' && !marriageDate.trim()) {
+      setFormError('Marriage date (DOM) is compulsory when adding a spouse.');
+      return;
+    }
+
+    if (editMember && hasSpouse && !marriageDate.trim()) {
+      setFormError('Marriage date (DOM) is compulsory for a married member.');
       return;
     }
 
@@ -570,7 +575,8 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               />
               <Input
                 type="date"
-                label="Marriage Date (DOM)"
+                label={hasSpouse ? 'Marriage Date (DOM) *' : 'Marriage Date (DOM)'}
+                required={hasSpouse}
                 value={marriageDate}
                 onChange={(e) => setMarriageDate(e.target.value)}
               />
@@ -881,7 +887,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               {relationshipType === 'SPOUSE' ? (
                 <Input
                   type="date"
-                  label="Marriage Date *"
+                  label="Marriage Date (DOM) *"
                   required
                   value={marriageDate}
                   onChange={(e) => setMarriageDate(e.target.value)}

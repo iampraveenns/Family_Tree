@@ -16,6 +16,7 @@ class Database {
   private memoryServer: any = null;
 
   private constructor() {
+    mongoose.set('bufferCommands', false);
     this.setupListeners();
   }
 

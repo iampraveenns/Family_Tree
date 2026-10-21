@@ -67,7 +67,7 @@ router.delete('/:memoryId', requireAuthentication, (req, res, next) => {
 });
 
 // Multipart Media Upload & Media List for Memory
-router.post('/:memoryId/media', requireAuthentication, upload.single('file'), (req, res, next) => {
+router.post('/:memoryId/media', requireAuthentication, upload.single('file') as any, (req: any, res: any, next) => {
   memoryController.uploadMedia(req, res, next);
 });
 

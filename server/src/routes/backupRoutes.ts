@@ -47,11 +47,11 @@ router.delete('/backups/:backupId', (req, res, next) => {
 });
 
 // Restore Workflow
-router.post('/restore/validate', upload.single('archive'), (req, res, next) => {
+router.post('/restore/validate', upload.single('archive') as any, (req: any, res, next) => {
   backupController.validateArchive(req, res, next);
 });
 
-router.post('/restore/execute', upload.single('archive'), (req, res, next) => {
+router.post('/restore/execute', upload.single('archive') as any, (req: any, res, next) => {
   backupController.executeRestore(req, res, next);
 });
 
