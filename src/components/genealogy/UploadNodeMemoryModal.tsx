@@ -401,7 +401,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                   <Upload className="w-5 h-5" />
                 </div>
                 <p className="text-xs text-[#17233C] font-medium">
-                  Drag and drop a photo, video, or audio recording here, or{' '}
+                  Drag and drop a photo or video here, or{' '}
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -411,7 +411,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                   </button>
                 </p>
                 <p className="text-[10px] text-[#64748B] mt-1">
-                  Supports JPEG, PNG, WebP, GIF, MP4, WebM, MOV, MP3, WAV up to 50MB
+                  Supports JPEG, PNG, WebP, GIF, MP4, WebM, MOV up to 50MB
                 </p>
               </div>
             )}
@@ -421,7 +421,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
               type="file"
               className="hidden"
               onChange={handleFileInputChange}
-              accept="image/*,video/*,audio/*"
+              accept="image/*,video/*"
             />
           </div>
         </div>

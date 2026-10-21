@@ -8,6 +8,7 @@ export const standardLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   validate: false,
+  skip: () => process.env.NODE_ENV === 'test',
   handler: (req, res) => {
     return sendError(
       res,
@@ -24,6 +25,7 @@ export const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   validate: false,
+  skip: () => process.env.NODE_ENV === 'test',
   handler: (req, res) => {
     return sendError(
       res,

@@ -294,23 +294,22 @@ describe('Phase 34: Family Tree Profile, Date Display & Selection Behavior', () 
       const nodeA = layout.nodes.find((n) => n.id === 'spouse-ravi')!;
       const nodeB = layout.nodes.find((n) => n.id === 'spouse-rani')!;
 
-      // Both nodes must have marriageDate mapped independently
+      // Primary member (nodeA) must have marriageDate mapped; spouse node (nodeB) has null
       expect(nodeA.data.marriageDate).toBe('2010-01-10');
-      expect(nodeB.data.marriageDate).toBe('2010-01-10');
+      expect(nodeB.data.marriageDate).toBeNull();
 
-      const rowsA = getNodeDateRows(nodeA.data.member, nodeA.data.marriageDate);
-      const rowsB = getNodeDateRows(nodeB.data.member, nodeB.data.marriageDate);
+      const rowsA = getNodeDateRows(nodeA.data.member, nodeA.data.marriageDate, nodeA.data.isSecondarySpouse);
+      const rowsB = getNodeDateRows(nodeB.data.member, nodeB.data.marriageDate, nodeB.data.isSecondarySpouse);
 
-      // Ravi node
+      // Ravi node (primary member)
       expect(rowsA).toEqual([
         { label: 'DOB', text: 'DOB: 19 May 1981' },
         { label: 'DOM', text: 'DOM: 10 Jan 2010' },
       ]);
 
-      // Rani node
+      // Rani node (spouse node - DOM omitted)
       expect(rowsB).toEqual([
         { label: 'DOB', text: 'DOB: 2 Feb 1999' },
-        { label: 'DOM', text: 'DOM: 10 Jan 2010' },
       ]);
     });
 
@@ -388,13 +387,12 @@ describe('Phase 34: Family Tree Profile, Date Display & Selection Behavior', () 
       const updatedLayout = calculateTreeLayout([spouse1, spouse2], [updatedRel], {});
       const upNode1 = updatedLayout.nodes.find((n) => n.id === 's1')!;
       const upNode2 = updatedLayout.nodes.find((n) => n.id === 's2')!;
-      expect(getNodeDateRows(upNode1.data.member, upNode1.data.marriageDate)).toEqual([
+      expect(getNodeDateRows(upNode1.data.member, upNode1.data.marriageDate, upNode1.data.isSecondarySpouse)).toEqual([
         { label: 'DOB', text: 'DOB: 12 Apr 1985' },
         { label: 'DOM', text: 'DOM: 18 May 2012' },
       ]);
-      expect(getNodeDateRows(upNode2.data.member, upNode2.data.marriageDate)).toEqual([
+      expect(getNodeDateRows(upNode2.data.member, upNode2.data.marriageDate, upNode2.data.isSecondarySpouse)).toEqual([
         { label: 'DOB', text: 'DOB: 23 Nov 1988' },
-        { label: 'DOM', text: 'DOM: 18 May 2012' },
       ]);
 
       // 3. Marriage date removed
@@ -479,14 +477,13 @@ describe('Phase 34: Family Tree Profile, Date Display & Selection Behavior', () 
         const hNode = tree.nodes.find((n) => n.id === 'h1')!;
         const wNode = tree.nodes.find((n) => n.id === 'w1')!;
 
-        // Both nodes
-        expect(getNodeDateRows(hNode.data.member, hNode.data.marriageDate)).toEqual([
+        // Primary node displays DOM; spouse node omits DOM
+        expect(getNodeDateRows(hNode.data.member, hNode.data.marriageDate, hNode.data.isSecondarySpouse)).toEqual([
           { label: 'DOB', text: 'DOB: 19 May 1981' },
           { label: 'DOM', text: 'DOM: 10 Jan 2010' },
         ]);
-        expect(getNodeDateRows(wNode.data.member, wNode.data.marriageDate)).toEqual([
+        expect(getNodeDateRows(wNode.data.member, wNode.data.marriageDate, wNode.data.isSecondarySpouse)).toEqual([
           { label: 'DOB', text: 'DOB: 2 Feb 1999' },
-          { label: 'DOM', text: 'DOM: 10 Jan 2010' },
         ]);
 
         // Both profiles (using shared helper)
@@ -595,13 +592,12 @@ describe('Phase 34: Family Tree Profile, Date Display & Selection Behavior', () 
         const n1 = treeAfter.nodes.find((n) => n.id === 'sp1')!;
         const n2 = treeAfter.nodes.find((n) => n.id === 'sp2')!;
 
-        expect(getNodeDateRows(n1.data.member, n1.data.marriageDate)).toEqual([
+        expect(getNodeDateRows(n1.data.member, n1.data.marriageDate, n1.data.isSecondarySpouse)).toEqual([
           { label: 'DOB', text: 'DOB: 10 Apr 1980' },
           { label: 'DOM', text: 'DOM: 20 Nov 2008' },
         ]);
-        expect(getNodeDateRows(n2.data.member, n2.data.marriageDate)).toEqual([
+        expect(getNodeDateRows(n2.data.member, n2.data.marriageDate, n2.data.isSecondarySpouse)).toEqual([
           { label: 'DOB', text: 'DOB: 15 Sep 1983' },
-          { label: 'DOM', text: 'DOM: 20 Nov 2008' },
         ]);
       });
 
@@ -647,13 +643,12 @@ describe('Phase 34: Family Tree Profile, Date Display & Selection Behavior', () 
         const n1 = treeEdited.nodes.find((n) => n.id === 'sp1')!;
         const n2 = treeEdited.nodes.find((n) => n.id === 'sp2')!;
 
-        expect(getNodeDateRows(n1.data.member, n1.data.marriageDate)).toEqual([
+        expect(getNodeDateRows(n1.data.member, n1.data.marriageDate, n1.data.isSecondarySpouse)).toEqual([
           { label: 'DOB', text: 'DOB: 10 Apr 1980' },
           { label: 'DOM', text: 'DOM: 14 Feb 2015' },
         ]);
-        expect(getNodeDateRows(n2.data.member, n2.data.marriageDate)).toEqual([
+        expect(getNodeDateRows(n2.data.member, n2.data.marriageDate, n2.data.isSecondarySpouse)).toEqual([
           { label: 'DOB', text: 'DOB: 15 Sep 1983' },
-          { label: 'DOM', text: 'DOM: 14 Feb 2015' },
         ]);
       });
 
@@ -702,16 +697,15 @@ describe('Phase 34: Family Tree Profile, Date Display & Selection Behavior', () 
         const r1 = tree.nodes.find((n) => n.id === 'user-1')!;
         const r2 = tree.nodes.find((n) => n.id === 'user-2')!;
 
-        // Living spouse shows DOB and DOM
-        expect(getNodeDateRows(r1.data.member, r1.data.marriageDate)).toEqual([
+        // Living primary spouse shows DOB and DOM
+        expect(getNodeDateRows(r1.data.member, r1.data.marriageDate, r1.data.isSecondarySpouse)).toEqual([
           { label: 'DOB', text: 'DOB: 19 May 1981' },
           { label: 'DOM', text: 'DOM: 10 Jan 2010' },
         ]);
 
-        // Deceased spouse with DOM shows DOB, DOM, and DOD
-        expect(getNodeDateRows(r2.data.member, r2.data.marriageDate)).toEqual([
+        // Deceased secondary spouse shows DOB and DOD (DOM on primary)
+        expect(getNodeDateRows(r2.data.member, r2.data.marriageDate, r2.data.isSecondarySpouse)).toEqual([
           { label: 'DOB', text: 'DOB: 2 Feb 1950' },
-          { label: 'DOM', text: 'DOM: 10 Jan 2010' },
           { label: 'DOD', text: 'DOD: 15 Mar 2020' },
         ]);
       });

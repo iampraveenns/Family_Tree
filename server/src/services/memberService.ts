@@ -78,12 +78,6 @@ export class MemberService {
       if (!member && familyId !== resolvedFamilyId && Types.ObjectId.isValid(familyId)) {
         member = await memberRepository.findByFamilyAndId(familyId, memberId);
       }
-      if (!member) {
-        const anyMember = await memberRepository.findById(memberId);
-        if (anyMember) {
-          member = anyMember;
-        }
-      }
     }
 
     if (!member) {
@@ -110,14 +104,6 @@ export class MemberService {
       existing = await memberRepository.findByFamilyAndId(resolvedFamilyId, memberId);
       if (!existing && familyId !== resolvedFamilyId && Types.ObjectId.isValid(familyId)) {
         existing = await memberRepository.findByFamilyAndId(familyId, memberId);
-      }
-      // If member exists in MongoDB under another family or stale session, heal and adopt its true family
-      if (!existing) {
-        const anyMember = await memberRepository.findById(memberId);
-        if (anyMember) {
-          existing = anyMember;
-          familyId = anyMember.familyId.toString();
-        }
       }
     }
 

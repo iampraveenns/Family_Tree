@@ -65,7 +65,7 @@ export class AiHeritageService {
     const deterministicSummary = `The ${familyName} heritage archive spans ${totalGens} generations, lovingly preserving the journeys of ${relativesCount} relatives${topPlaces ? ` across ${topPlaces}` : ''}. With ${memoryCount} treasured memories${peakDecade ? ` peaking in the vibrant ${peakDecade}` : ''}, and strong branch lineages led by ${largestBranch?.name || 'founding ancestors'}, this chronicle stands as a lasting tribute to family bonds and shared memories.`;
 
     const client = getGeminiClient();
-    if (!client) {
+    if (!client || process.env.NODE_ENV === 'test') {
       return {
         summary: deterministicSummary,
         isAiGenerated: false,

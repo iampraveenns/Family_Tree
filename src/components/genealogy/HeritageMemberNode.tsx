@@ -500,9 +500,9 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
           )}
         </div>
 
-        {/* Two Compact Status Badges: [Living / RIP] and [Single / Married] */}
+        {/* Two Compact Status Badges: [Living / Death Circle Indicator] and [Single / Married] */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Badge 1: Living / RIP (Clickable badge to edit life status) */}
+          {/* Badge 1: Living / Death circular indicator (Clickable to edit life status) */}
           <button
             type="button"
             onClick={(e) => {
@@ -516,21 +516,22 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
             title={`Edit life status for ${fullName} (${isDeceased ? 'Rest in Peace' : 'Living'})`}
             aria-label={`Edit life status for ${fullName}. Currently ${isDeceased ? 'RIP (Rest in Peace)' : 'Living'}`}
             data-status={isDeceased ? 'RIP' : 'Living'}
-            className={`h-[21px] inline-flex items-center justify-center gap-1.5 px-2 py-0.5 rounded-md text-[9.5px] font-semibold whitespace-nowrap transition-colors cursor-pointer select-none shrink-0 ${
+            data-testid={`life-status-indicator-${member.id}`}
+            className={`w-[21px] h-[21px] inline-flex items-center justify-center rounded-full transition-colors cursor-pointer select-none shrink-0 ${
               !isDeceased
-                ? 'bg-[#DCFCE7] text-[#166534] border border-[#BBF7D0] hover:bg-[#bbf7d0]'
-                : 'bg-white/80 text-[#17233C]/80 border border-[#B8D4FF] hover:bg-[#EFF6FF]'
+                ? 'bg-[#DCFCE7] border border-[#86EFAC] hover:bg-[#BBF7D0]'
+                : 'bg-[#F1F5F9] border border-[#CBD5E1] hover:bg-[#E2E8F0]'
             }`}
           >
             {!isDeceased ? (
               <>
-                <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] shrink-0" />
-                <span className="whitespace-nowrap">Living</span>
+                <span className="w-2 h-2 rounded-full bg-[#16A34A] shrink-0" />
+                <span className="sr-only">Living</span>
               </>
             ) : (
               <>
-                <span className="w-1.5 h-1.5 rounded-full bg-[#64748B] shrink-0" />
-                <span className="whitespace-nowrap font-bold" data-testid={`rip-badge-${member.id}`}>RIP</span>
+                <span className="w-2 h-2 rounded-full bg-[#64748B] shrink-0" />
+                <span className="sr-only" data-testid={`rip-badge-${member.id}`}>RIP</span>
               </>
             )}
           </button>

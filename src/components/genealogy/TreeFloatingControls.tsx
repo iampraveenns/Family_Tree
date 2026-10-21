@@ -57,7 +57,7 @@ export const TreeFloatingControls: React.FC<TreeFloatingControlsProps> = ({
       <div
         data-testid="tree-floating-controls"
         className={`absolute top-5 right-5 ${
-          isDrawerOpen || isMemoriesSidebarOpen ? 'sm:right-[445px]' : ''
+          isDrawerOpen || isMemoriesSidebarOpen ? 'sm:right-[436px]' : ''
         } z-35 flex items-center gap-1 p-1.5 rounded-xl bg-white border-[1.5px] border-[#B8D4FF] shadow-md transition-all duration-200 max-w-[calc(100vw-40px)] overflow-x-auto`}
       >
         {/* Zoom In */}

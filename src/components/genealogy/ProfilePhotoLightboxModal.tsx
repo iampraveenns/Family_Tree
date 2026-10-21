@@ -82,12 +82,12 @@ export const ProfilePhotoLightboxModal: React.FC<ProfilePhotoLightboxModalProps>
           transition={{ duration: 0.2, ease: 'easeOut' }}
           onClick={onClose}
           style={{
-            backgroundColor: 'rgba(248, 250, 252, 0.94)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
+            backgroundColor: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(5px)',
+            WebkitBackdropFilter: 'blur(5px)',
             zIndex: 999999,
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-50/95 backdrop-blur-[8px] select-none"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 backdrop-blur-[5px] select-none"
         >
           {/* Top-Right Accessible Close Button */}
           <button

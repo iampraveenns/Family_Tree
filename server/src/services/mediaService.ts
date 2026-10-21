@@ -208,9 +208,7 @@ export class MediaService {
         options.expires,
         !!options.isThumbnail
       );
-    }
-
-    if (!authorized && options.actorUserId) {
+    } else if (options.actorUserId) {
       const memory = await memoryRepository.findById(media.memoryId);
       if (memory) {
         const auth = await authorizationService.canViewMemory(
@@ -219,19 +217,6 @@ export class MediaService {
           memory
         );
         authorized = auth.allowed;
-      }
-    }
-
-    if (!authorized) {
-      const memory = await memoryRepository.findById(media.memoryId);
-      if (
-        memory &&
-        (memory.status === MemoryStatus.ACTIVE || !memory.status) &&
-        (memory.visibility === MemoryVisibility.FAMILY ||
-          memory.visibility === MemoryVisibility.PUBLIC ||
-          process.env.NODE_ENV !== 'production')
-      ) {
-        authorized = true;
       }
     }
 
