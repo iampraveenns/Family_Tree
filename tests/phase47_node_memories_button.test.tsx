@@ -23,7 +23,7 @@ vi.mock('reactflow', () => ({
   },
 }));
 
-describe('Phase 47: Family Tree Node Memories Button & Upload Flow', () => {
+describe('Phase 47: Node Memory Button Removal & Direct Sidebar Memory Management', () => {
   const mockMember: FamilyMember = {
     id: 'mem-101',
     familyId: 'fam-1',
@@ -51,7 +51,7 @@ describe('Phase 47: Family Tree Node Memories Button & Upload Flow', () => {
     generation: 2,
   };
 
-  it('renders Memories button near the Spouse button on Member node with matching styling', () => {
+  it('removes Memories button from Member node footer while retaining + Child and + Spouse', () => {
     const nodeData: HeritageMemberNodeData = {
       member: mockMember,
       isSelected: false,
@@ -68,21 +68,17 @@ describe('Phase 47: Family Tree Node Memories Button & Upload Flow', () => {
       />
     );
 
-    // Verify Child, Spouse, and Memories buttons are all present
+    // Verify Child and Spouse buttons are present
     expect(html).toContain('+ Child');
     expect(html).toContain('+ Spouse');
-    expect(html).toContain('+ Memories');
 
-    // Verify testid and data-action attributes
-    expect(html).toContain('data-testid="node-memories-btn-mem-101"');
-    expect(html).toContain('data-action="upload-memory"');
-
-    // Verify Memories button has the identical button styling classes
-    expect(html).toContain('px-2 py-0.5 rounded bg-white hover:bg-[#EFF6FF] hover:text-[#2563EB]');
-    expect(html).toContain('text-[#17233C] border border-[#B8D4FF] font-medium text-[10.5px]');
+    // Verify Memory button has been removed from node
+    expect(html).not.toContain('+ Memories');
+    expect(html).not.toContain('data-testid="node-memories-btn-mem-101"');
+    expect(html).not.toContain('data-action="upload-memory"');
   });
 
-  it('renders Memories button on the left bottom corner for Spouse node, without + Child or + Spouse', () => {
+  it('removes Memories button on Spouse node', () => {
     const spouseNodeData: HeritageMemberNodeData = {
       member: mockSpouse,
       isSelected: false,
@@ -99,18 +95,13 @@ describe('Phase 47: Family Tree Node Memories Button & Upload Flow', () => {
       />
     );
 
-    // Spouse node MUST NOT have + Child or + Spouse
-    expect(html).not.toContain('+ Child');
-    expect(html).not.toContain('+ Spouse');
-
-    // Spouse node MUST have + Memories on the left bottom corner
-    expect(html).toContain('+ Memories');
-    expect(html).toContain('data-testid="node-memories-btn-mem-102"');
-    expect(html).toContain('data-action="upload-memory"');
-    expect(html).toContain('px-2 py-0.5 rounded bg-white hover:bg-[#EFF6FF] hover:text-[#2563EB]');
+    // Spouse node does not have + Memories button
+    expect(html).not.toContain('+ Memories');
+    expect(html).not.toContain('data-testid="node-memories-btn-mem-102"');
+    expect(html).not.toContain('data-action="upload-memory"');
   });
 
-  it('renders Memories button in popup editbar with #FFF9D6 background when node is selected', () => {
+  it('removes Memories button from popup editbar when node is selected', () => {
     const selectedNodeData: HeritageMemberNodeData = {
       member: mockMember,
       isSelected: true,
@@ -128,17 +119,20 @@ describe('Phase 47: Family Tree Node Memories Button & Upload Flow', () => {
     );
 
     expect(html).toContain('data-testid="node-popup-editbar-mem-101"');
-    expect(html).toMatch(/background-color:\s*(rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
-    expect(html).toContain('title="Upload Memories (Photos/Videos)"');
-    expect(html).toContain('Memories</span>');
+    expect(html).toContain('Profile');
+    expect(html).toContain('Edit');
+    expect(html).toContain('Kinship');
+    // Memories button is removed from popup editbar
+    expect(html).not.toContain('title="Upload Memories (Photos/Videos)"');
   });
 
-  it('renders UploadNodeMemoryModal displaying Add Memories title, Date datepicker, and photos, videos, and audios upload capabilities without yellow banner', () => {
+  it('renders UploadNodeMemoryModal displaying Add Memory title, author selector, Date datepicker, and photos, videos, and audios upload capabilities', () => {
     const html = renderToString(
       <MemoryRouter>
         <UploadNodeMemoryModal
           isOpen={true}
           member={mockMember}
+          members={[mockMember, mockSpouse]}
           familyId="fam-1"
           onClose={() => {}}
         />
@@ -146,22 +140,20 @@ describe('Phase 47: Family Tree Node Memories Button & Upload Flow', () => {
     );
 
     // Modal title & subtitle
-    expect(html).toContain('Add Memories');
-    expect(html).toContain('Devan Pattara');
-    expect(html).not.toContain('Upload Memories for');
+    expect(html).toContain('Add Memory');
+    expect(html).toContain('Devan');
 
-    // Yellow banner callout next to heading is removed
-    expect(html).not.toContain('Preserve in Family Memories:');
+    // Author selector present
+    expect(html).toContain('Added By (Memory Contributor)');
+    expect(html).toContain('data-testid="author-member-select"');
 
     // Drag and drop photo, video, or audio
-    expect(html).toContain('Select Photo, Video, or Audio');
-    expect(html).toContain('Drag and drop photos, videos, or audios here');
+    expect(html).toContain('Upload Photo, Video, or Audio');
     expect(html).toContain('accept="image/*,video/*,audio/*"');
 
-    // Date datepicker (not just regular text input)
+    // Date datepicker
     expect(html).toContain('type="date"');
     expect(html).toContain('Date');
-    expect(html).not.toContain('Date or Year (Optional)');
 
     // Form buttons
     expect(html).toContain('Add to Memories');

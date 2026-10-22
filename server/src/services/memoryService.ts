@@ -33,6 +33,8 @@ export interface CreateMemoryInput {
   branchIds?: string[];
   tags?: string[];
   coverMediaId?: string;
+  addedByMemberId?: string;
+  addedByMemberName?: string;
 }
 
 export interface UpdateMemoryInput {
@@ -48,6 +50,8 @@ export interface UpdateMemoryInput {
   tags?: string[];
   coverMediaId?: string | null;
   status?: MemoryStatus;
+  addedByMemberId?: string;
+  addedByMemberName?: string;
 }
 
 export class MemoryService {
@@ -74,14 +78,12 @@ export class MemoryService {
     const memberOids: Types.ObjectId[] = [];
     if (input.memberIds && input.memberIds.length > 0) {
       for (const mId of input.memberIds) {
-        if (!Types.ObjectId.isValid(mId)) {
-          throw new ValidationError(`Invalid member ID: ${mId}`);
+        if (mId && Types.ObjectId.isValid(mId)) {
+          const member = await memberRepository.findById(mId);
+          if (member && member.familyId.toString() === familyId) {
+            memberOids.push(new Types.ObjectId(mId));
+          }
         }
-        const member = await memberRepository.findById(mId);
-        if (!member || member.familyId.toString() !== familyId) {
-          throw new ValidationError(`Tagged member ${mId} not found in this family space`);
-        }
-        memberOids.push(new Types.ObjectId(mId));
       }
     }
 
@@ -89,14 +91,12 @@ export class MemoryService {
     const branchOids: Types.ObjectId[] = [];
     if (input.branchIds && input.branchIds.length > 0) {
       for (const bId of input.branchIds) {
-        if (!Types.ObjectId.isValid(bId)) {
-          throw new ValidationError(`Invalid branch ID: ${bId}`);
+        if (bId && Types.ObjectId.isValid(bId)) {
+          const branch = await branchRepository.findById(bId);
+          if (branch && branch.familyId.toString() === familyId) {
+            branchOids.push(new Types.ObjectId(bId));
+          }
         }
-        const branch = await branchRepository.findById(bId);
-        if (!branch || branch.familyId.toString() !== familyId) {
-          throw new ValidationError(`Branch ${bId} not found in this family space`);
-        }
-        branchOids.push(new Types.ObjectId(bId));
       }
     }
 
@@ -107,12 +107,36 @@ export class MemoryService {
 
     const parsedDate = input.eventDate ? new Date(input.eventDate) : undefined;
 
+    // Resolve authoring member
+    let authorMemberId: Types.ObjectId | undefined = undefined;
+    let authorMemberName: string | undefined = input.addedByMemberName?.trim();
+
+    if (input.addedByMemberId && Types.ObjectId.isValid(input.addedByMemberId)) {
+      const authorMember = await memberRepository.findById(input.addedByMemberId);
+      if (authorMember) {
+        authorMemberId = new Types.ObjectId(input.addedByMemberId);
+        if (!authorMemberName) {
+          authorMemberName = authorMember.displayName || `${authorMember.firstName} ${authorMember.lastName}`.trim();
+        }
+      }
+    }
+
+    if (!authorMemberId && memberOids.length > 0) {
+      authorMemberId = memberOids[0];
+      const m = await memberRepository.findById(memberOids[0].toString());
+      if (m && !authorMemberName) {
+        authorMemberName = m.displayName || `${m.firstName} ${m.lastName}`.trim();
+      }
+    }
+
     const memory = await memoryRepository.create({
       familyId: new Types.ObjectId(familyId),
       title: input.title.trim(),
       description: input.description?.trim() || '',
       memoryType: input.memoryType,
       createdBy: new Types.ObjectId(actorUserId),
+      addedByMemberId: authorMemberId,
+      addedByMemberName: authorMemberName,
       eventDate: parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate : undefined,
       eventDateApprox: input.eventDateApprox?.trim(),
       location: input.location?.trim(),

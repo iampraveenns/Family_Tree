@@ -200,15 +200,11 @@ const FamilyTreeInner: React.FC = () => {
   const [isMemoryUploadModalOpen, setIsMemoryUploadModalOpen] = useState(false);
 
   const handleOpenUploadMemoryModal = useCallback((member?: FamilyMember | null) => {
-    const target = member || selectedMember || members[0] || null;
-    if (target && (!target.isLiving || Boolean(target.dateOfDeath))) {
-      toastError(`Memories upload is disabled for deceased relative (${target.displayName || `${target.firstName} ${target.lastName}`.trim()}).`);
-      return;
-    }
+    const target = member !== undefined ? member : (selectedMember || members[0] || null);
     setMemoryUploadMember(target);
     setIsMemoryUploadModalOpen(true);
     setShowHint(false);
-  }, [selectedMember, members, toastError]);
+  }, [selectedMember, members]);
 
   const handleEditMemberSubmit = useCallback(
     async (memberId: string, data: Partial<MemberFormData>) => {
@@ -746,13 +742,10 @@ const FamilyTreeInner: React.FC = () => {
           onViewPhoto: (m: FamilyMember, photoUrl: string) => {
             setPhotoViewerState({ member: m, photoUrl });
           },
-          onUploadMemory: (m: FamilyMember) => {
-            handleOpenUploadMemoryModal(m);
-          },
         },
       };
     });
-  }, [layoutResult.nodes, handleOpenAddRelative, handleOpenEditModal, handleToggleLiving, handleOpenLifeStatusModal, handleOpenUploadMemoryModal, members, isSubmitting, memberHasSpouse]);
+  }, [layoutResult.nodes, handleOpenAddRelative, handleOpenEditModal, handleToggleLiving, handleOpenLifeStatusModal, members, isSubmitting, memberHasSpouse]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(finalNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutResult.edges);
@@ -2638,18 +2631,19 @@ const FamilyTreeInner: React.FC = () => {
         />
       )}
 
-      {/* Upload Memory Modal from Tree Nodes (Photos and Videos visible in Memories Section) */}
-      {isMemoryUploadModalOpen && memoryUploadMember && (currentFamily?.id || activeFamilyId) && (
+      {/* Upload Memory Modal (Photos, Videos, Audios, and Stories visible in Memories Section) */}
+      {isMemoryUploadModalOpen && (currentFamily?.id || activeFamilyId || (availableFamilies.length > 0 ? availableFamilies[0].id : '')) && (
         <UploadNodeMemoryModal
           isOpen={isMemoryUploadModalOpen}
           member={memoryUploadMember}
-          familyId={currentFamily?.id || activeFamilyId}
+          members={members}
+          familyId={currentFamily?.id || activeFamilyId || (availableFamilies.length > 0 ? availableFamilies[0].id : '')}
           onClose={() => {
             setIsMemoryUploadModalOpen(false);
             setMemoryUploadMember(null);
           }}
           onSuccess={() => {
-            const famId = currentFamily?.id || activeFamilyId;
+            const famId = currentFamily?.id || activeFamilyId || (availableFamilies.length > 0 ? availableFamilies[0].id : '');
             if (famId) {
               fetchFamilyTree(famId);
               fetchMemories(famId);

@@ -128,6 +128,8 @@ export interface Memory {
   description?: string;
   memoryType: MemoryType;
   createdBy?: string | { id: string; name: string };
+  addedByMemberId?: string;
+  addedByMemberName?: string;
   eventDate?: string;
   eventDateApprox?: string;
   location?: string;

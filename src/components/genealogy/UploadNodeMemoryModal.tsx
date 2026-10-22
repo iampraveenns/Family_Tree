@@ -8,13 +8,14 @@ import {
   Calendar,
   MapPin,
   AlertTriangle,
-  ExternalLink,
   Loader2,
   Sparkles,
-  ArrowRight,
   Mic,
+  FileText,
+  User,
+  Users,
+  Check,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { FamilyMember, MemoryType } from '../../types/index.ts';
 import { useMemoryStore } from '../../stores/useMemoryStore.ts';
 import { useToastStore } from '../../stores/useToastStore.ts';
@@ -24,26 +25,27 @@ import { Button } from '../ui/Button.tsx';
 
 export interface UploadNodeMemoryModalProps {
   isOpen: boolean;
-  member: FamilyMember | null;
+  member?: FamilyMember | null;
   familyId: string;
+  members?: FamilyMember[];
   onClose: () => void;
   onSuccess?: () => void;
 }
 
 export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
   isOpen,
-  member,
+  member = null,
   familyId,
+  members = [],
   onClose,
   onSuccess,
 }) => {
-  const navigate = useNavigate();
   const {
     createMemory,
     checkDuplicateMedia,
-    openDetail,
     fetchMemories,
     fetchStats,
+    error: storeError,
   } = useMemoryStore();
   const { success: showToastSuccess, error: showToastError } = useToastStore();
 
@@ -54,6 +56,9 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
   const [description, setDescription] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [location, setLocation] = useState('');
+  const [authorMemberId, setAuthorMemberId] = useState<string>('');
+  const [customAuthorName, setCustomAuthorName] = useState<string>('');
+  const [selectedTaggedIds, setSelectedTaggedIds] = useState<string[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -66,21 +71,31 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize or reset when member or open state changes
+  // Initialize or reset when open state or member changes
   useEffect(() => {
-    if (isOpen && member) {
-      const defaultTitle = `${member.displayName || `${member.firstName} ${member.lastName}`}'s Memory`;
-      setTitle(defaultTitle);
+    if (isOpen) {
+      const defaultAuthor = member || members[0] || null;
+      setAuthorMemberId(defaultAuthor?.id || '');
+      setCustomAuthorName('');
+      setSelectedTaggedIds(member ? [member.id] : []);
+
+      if (member) {
+        setTitle(`${member.displayName || `${member.firstName} ${member.lastName}`.trim()}'s Memory`);
+        setLocation(member.location || member.birthPlace || '');
+      } else {
+        setTitle('');
+        setLocation('');
+      }
+
       setDescription('');
       setEventDate('');
-      setLocation(member.location || member.birthPlace || '');
       setMediaFile(null);
       setPreviewUrl(null);
       setFileType(null);
       setFormError(null);
       setDuplicateWarning(null);
     }
-  }, [isOpen, member]);
+  }, [isOpen, member, members]);
 
   // Clean up object URLs
   useEffect(() => {
@@ -91,9 +106,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
     };
   }, [previewUrl]);
 
-  if (!isOpen || !member) return null;
-
-  const memberFullName = member.displayName || `${member.firstName} ${member.lastName}`;
+  if (!isOpen) return null;
 
   const processSelectedFile = async (file: File) => {
     const isImage = file.type.startsWith('image/');
@@ -101,7 +114,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
     const isAudio = file.type.startsWith('audio/');
 
     if (!isImage && !isVideo && !isAudio) {
-      setFormError('Please select a valid photo, video, or audio file (JPEG, PNG, WebP, MP4, MOV, MP3, WAV, etc.).');
+      setFormError('Please select a photo, video, or audio file (JPEG, PNG, WebP, MP4, MOV, MP3, WAV, etc.).');
       return;
     }
 
@@ -116,28 +129,34 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
     setFormError(null);
     setDuplicateWarning(null);
 
-    // Auto update title if still matching previous generic default
-    if (!title || title.endsWith("'s Memory")) {
+    // Auto set title if empty
+    if (!title.trim() || title.endsWith("'s Memory")) {
       const cleanFileName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-      setTitle(`${member.firstName} — ${cleanFileName}`);
+      if (member) {
+        setTitle(`${member.firstName} — ${cleanFileName}`);
+      } else {
+        setTitle(cleanFileName.charAt(0).toUpperCase() + cleanFileName.slice(1));
+      }
     }
 
-    // Check duplicate media checksum
-    try {
-      setIsCheckingDuplicate(true);
-      const arrayBuffer = await file.arrayBuffer();
-      const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    // Check duplicate media checksum if familyId is valid
+    if (familyId) {
+      try {
+        setIsCheckingDuplicate(true);
+        const arrayBuffer = await file.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 
-      const res = await checkDuplicateMedia(familyId, hex);
-      if (res.isDuplicate) {
-        setDuplicateWarning(res);
+        const res = await checkDuplicateMedia(familyId, hex);
+        if (res.isDuplicate) {
+          setDuplicateWarning(res);
+        }
+      } catch (err) {
+        console.warn('Duplicate checksum check failed, proceeding:', err);
+      } finally {
+        setIsCheckingDuplicate(false);
       }
-    } catch (err) {
-      console.warn('Duplicate checksum check failed, proceeding:', err);
-    } finally {
-      setIsCheckingDuplicate(false);
     }
   };
 
@@ -166,12 +185,14 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
     }
   };
 
+  const toggleTagMember = (mId: string) => {
+    setSelectedTaggedIds((prev) =>
+      prev.includes(mId) ? prev.filter((id) => id !== mId) : [...prev, mId]
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!mediaFile) {
-      setFormError('Please choose a photo, video, or audio file to upload.');
-      return;
-    }
 
     if (!title.trim()) {
       setFormError('Please provide a title for this memory.');
@@ -182,7 +203,41 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
       setIsSubmitting(true);
       setFormError(null);
 
-      const memoryType: MemoryType = fileType === 'audio' ? 'AUDIO' : 'PHOTO';
+      // Determine memoryType
+      let memoryType: MemoryType = 'PHOTO';
+      if (fileType === 'audio') {
+        memoryType = 'AUDIO';
+      } else if (fileType === 'video') {
+        memoryType = 'PHOTO'; // Supported type in backend enum
+      } else if (!mediaFile && description.trim()) {
+        memoryType = 'STORY';
+      }
+
+      // Determine author
+      const selectedAuthor = members.find((m) => m.id === authorMemberId) || member;
+      const authorFullName =
+        customAuthorName.trim() ||
+        (selectedAuthor
+          ? selectedAuthor.displayName || `${selectedAuthor.firstName} ${selectedAuthor.lastName}`.trim()
+          : 'Family Member');
+
+      // Tagged member IDs
+      const allMemberIds = Array.from(
+        new Set([
+          ...selectedTaggedIds,
+          ...(selectedAuthor?.id ? [selectedAuthor.id] : []),
+          ...(member?.id ? [member.id] : []),
+        ])
+      ).filter(Boolean);
+
+      // Validate 24-character hex ObjectId for branchIds to prevent backend validation errors
+      const isValidObjectId = (id?: string) => Boolean(id && /^[0-9a-fA-F]{24}$/.test(id));
+      const branchIds =
+        selectedAuthor?.branchId && isValidObjectId(selectedAuthor.branchId)
+          ? [selectedAuthor.branchId]
+          : member?.branchId && isValidObjectId(member.branchId)
+          ? [member.branchId]
+          : undefined;
 
       const payload = {
         title: title.trim(),
@@ -191,17 +246,17 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
         eventDate: eventDate.trim() || undefined,
         location: location.trim() || undefined,
         visibility: 'FAMILY' as const,
-        memberIds: [member.id],
-        branchIds: member.branchId ? [member.branchId] : undefined,
+        addedByMemberId: selectedAuthor?.id || member.id,
+        addedByMemberName: authorFullName,
+        memberIds: allMemberIds.length > 0 ? allMemberIds : undefined,
+        branchIds,
       };
 
-      const result = await createMemory(familyId, payload, mediaFile);
+      const result = await createMemory(familyId, payload, mediaFile || undefined);
 
       if (result) {
-        showToastSuccess(
-          `Memory successfully uploaded for ${memberFullName}! Visible now in the Memories section.`
-        );
-        // Refresh memory store and stats so it immediately updates in the Memories tab
+        showToastSuccess(`Memory "${title.trim()}" successfully saved! Visible now in the Memories sidebar.`);
+        // Refresh memory store and stats so it immediately appears
         await Promise.all([
           fetchMemories(familyId),
           fetchStats(familyId),
@@ -209,10 +264,10 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
         onSuccess?.();
         onClose();
       } else {
-        setFormError('Failed to upload memory. Please check file format and try again.');
+        setFormError(useMemoryStore.getState().error || 'Failed to save memory. Please check details and try again.');
       }
     } catch (err: any) {
-      console.error('Failed to upload memory from tree node:', err);
+      console.error('Failed to create memory:', err);
       setFormError(err?.message || 'Error occurred while saving memory.');
       showToastError(err?.message || 'Failed to preserve memory');
     } finally {
@@ -231,10 +286,12 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
           </div>
           <div>
             <h3 className="text-base font-bold text-[#17233C] leading-snug">
-              Add Memories
+              Add Memory
             </h3>
             <p className="text-[11px] text-[#475569] font-normal">
-              Preserve photos, videos, and audios for {memberFullName} in family archives
+              {member
+                ? `Preserve photos, videos, audios, and stories for ${member.displayName || member.firstName} in family archives`
+                : 'Preserve cherished photos, videos, audios, and stories in family archives'}
             </p>
           </div>
         </div>
@@ -244,17 +301,62 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
       className="!bg-[#FFF9D6] !border-[#B8D4FF] text-[#17233C]"
       style={{ backgroundColor: '#FFF9D6', color: '#17233C' }}
     >
-      <form onSubmit={handleSubmit} className="space-y-4 pt-1" noValidate={false}>
+      <form onSubmit={handleSubmit} className="space-y-3.5 pt-1" noValidate={false}>
         {formError && (
           <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
             {formError}
           </div>
         )}
 
-        {/* File Drag & Drop / Upload Area */}
+        {/* 1. Person Adding Memory / Author Selector */}
+        <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200/80 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[#17233C] flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5 text-blue-600" />
+              <span>Added By (Memory Contributor)</span>
+              <span className="text-[10px] font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">
+                Author
+              </span>
+            </span>
+            <span className="text-[10px] text-slate-500">Displayed at top of memory post</span>
+          </div>
+
+          <div className="space-y-1.5">
+            {members && members.length > 0 ? (
+              <select
+                id="author-member-select"
+                data-testid="author-member-select"
+                value={authorMemberId}
+                onChange={(e) => {
+                  setAuthorMemberId(e.target.value);
+                  if (e.target.value) setCustomAuthorName('');
+                }}
+                className="w-full text-xs font-medium py-1.5 px-2.5 pr-8 bg-white border border-blue-300 rounded-lg text-[#17233C] cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-[#2563EB]"
+              >
+                <option value="">Select family member as author...</option>
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.displayName || `${m.firstName} ${m.lastName}`.trim()} {m.branchName ? `(${m.branchName})` : ''}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+
+            {/* Custom Author Name Input if needed */}
+            <input
+              type="text"
+              placeholder="Or enter author's name (e.g. Grandma, Uncle Joe, or your name)..."
+              value={customAuthorName}
+              onChange={(e) => setCustomAuthorName(e.target.value)}
+              className="w-full px-2.5 py-1.5 rounded-lg border border-blue-200 bg-white text-xs text-[#17233C] placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* 2. File Drag & Drop / Upload Area */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-[#17233C] flex items-center justify-between">
-            <span>Select Photo, Video, or Audio <span className="text-red-500">*</span></span>
+            <span>Upload Photo, Video, or Audio (Optional for story posts)</span>
             {mediaFile && (
               <span className="text-[10px] text-[#64748B] font-normal">
                 {(mediaFile.size / (1024 * 1024)).toFixed(2)} MB
@@ -267,33 +369,33 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
             onDragOver={handleDrag}
             onDragLeave={handleDrag}
             onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-xl p-4 text-center transition-all ${
+            className={`border-2 border-dashed rounded-xl p-3.5 text-center transition-all ${
               dragActive
                 ? 'border-[#2563EB] bg-[#EFF6FF]'
                 : 'border-[#CBD5E1] hover:border-[#94A3B8] bg-[#F8FAFC]'
             }`}
           >
             {mediaFile && previewUrl ? (
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {/* Media Preview Box */}
-                <div className="relative rounded-lg overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center max-h-56">
+                <div className="relative rounded-lg overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center max-h-52">
                   {fileType === 'image' ? (
                     <img
                       src={previewUrl}
                       alt="Upload preview"
-                      className="max-h-56 w-auto object-contain mx-auto"
+                      className="max-h-52 w-auto object-contain mx-auto"
                     />
                   ) : fileType === 'video' ? (
                     <video
                       src={previewUrl}
                       controls
                       playsInline
-                      className="max-h-56 w-full object-contain bg-slate-100"
+                      className="max-h-52 w-full object-contain bg-slate-100"
                     />
                   ) : (
-                    <div className="p-6 flex flex-col items-center justify-center w-full">
-                      <Mic className="w-10 h-10 text-emerald-600 mb-2" />
-                      <audio src={previewUrl} controls className="w-full max-w-md" />
+                    <div className="p-4 flex flex-col items-center justify-center w-full">
+                      <Mic className="w-8 h-8 text-emerald-600 mb-1.5" />
+                      <audio src={previewUrl} controls className="w-full max-w-xs" />
                     </div>
                   )}
                   <button
@@ -307,7 +409,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                     className="absolute top-2 right-2 p-1.5 rounded-full bg-white/90 text-slate-700 hover:bg-white border border-slate-200 shadow-sm transition-colors cursor-pointer"
                     title="Remove selected file"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
@@ -356,12 +458,12 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                 )}
               </div>
             ) : (
-              <div className="py-2">
-                <div className="w-10 h-10 rounded-full bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center mx-auto mb-2">
-                  <Upload className="w-5 h-5" />
+              <div className="py-1.5">
+                <div className="w-9 h-9 rounded-full bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center mx-auto mb-1.5">
+                  <Upload className="w-4 h-4" />
                 </div>
                 <p className="text-xs text-[#17233C] font-medium">
-                  Drag and drop photos, videos, or audios here, or{' '}
+                  Drag and drop photos, videos, or audios, or{' '}
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -370,8 +472,8 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                     browse files
                   </button>
                 </p>
-                <p className="text-[10px] text-[#64748B] mt-1">
-                  Supports photos, videos, and audios (JPEG, PNG, WebP, GIF, MP4, WebM, MOV, MP3, WAV, etc.) up to 50MB
+                <p className="text-[10px] text-[#64748B] mt-0.5">
+                  Supports JPEG, PNG, WebP, GIF, MP4, WebM, MOV, MP3, WAV up to 50MB
                 </p>
               </div>
             )}
@@ -386,7 +488,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
           </div>
         </div>
 
-        {/* Title Input */}
+        {/* 3. Title Input */}
         <div className="space-y-1">
           <label className="text-xs font-semibold text-[#17233C] block">
             Memory Title <span className="text-red-500">*</span>
@@ -396,24 +498,59 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
             required
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={`e.g. ${member.firstName}'s graduation snapshot, wedding portrait, family story...`}
-            className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none"
+            placeholder="e.g. Golden Wedding Anniversary, Childhood Photo, Family Reunion 1985..."
+            className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none"
           />
         </div>
 
-        {/* Date and Location (2 columns) */}
+        {/* 4. Tag Relatives in Memory (Optional) */}
+        {members && members.length > 0 && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[#17233C] flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <Users className="w-3.5 h-3.5 text-blue-600" />
+                <span>Tag Relatives in this Memory</span>
+              </span>
+              <span className="text-[10px] text-slate-500">
+                {selectedTaggedIds.length} selected
+              </span>
+            </label>
+            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1.5 bg-white/70 rounded-lg border border-[#CBD5E1]">
+              {members.map((m) => {
+                const isTagged = selectedTaggedIds.includes(m.id);
+                return (
+                  <button
+                    type="button"
+                    key={m.id}
+                    onClick={() => toggleTagMember(m.id)}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+                      isTagged
+                        ? 'bg-[#2563EB] text-white shadow-2xs'
+                        : 'bg-white hover:bg-slate-100 text-[#17233C] border border-slate-200'
+                    }`}
+                  >
+                    {isTagged && <Check className="w-3 h-3" />}
+                    <span>{m.displayName || `${m.firstName} ${m.lastName}`.trim()}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 5. Date and Location (2 columns) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <label htmlFor="memory-event-date" className="text-xs font-semibold text-[#17233C] flex items-center gap-1">
               <Calendar className="w-3 h-3 text-[#64748B]" />
-              <span>Date</span>
+              <span>Date (Optional)</span>
             </label>
             <input
               id="memory-event-date"
               type="date"
               value={eventDate}
               onChange={(e) => setEventDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none cursor-pointer"
+              className="w-full px-3 py-1.5 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none cursor-pointer"
             />
           </div>
 
@@ -427,23 +564,23 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="e.g. Ancestral Home, Kerala"
-              className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none"
+              className="w-full px-3 py-1.5 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none"
             />
           </div>
         </div>
 
-
-        {/* Description / Story text */}
+        {/* 6. Description / Story text */}
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-[#17233C] block">
-            Story or Notes (Optional)
+          <label className="text-xs font-semibold text-[#17233C] flex items-center gap-1">
+            <FileText className="w-3 h-3 text-[#64748B]" />
+            <span>Story or Notes (Optional)</span>
           </label>
           <textarea
             rows={2}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Share context, memories, names of people in the photo or video..."
-            className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none resize-none"
+            placeholder="Share the story, precious words, memories, and who is in the picture..."
+            className="w-full px-3 py-1.5 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none resize-none"
           />
         </div>
 
@@ -461,7 +598,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
 
           <Button
             type="submit"
-            disabled={isSubmitting || !mediaFile || !title.trim()}
+            disabled={isSubmitting || !title.trim()}
             className="px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (

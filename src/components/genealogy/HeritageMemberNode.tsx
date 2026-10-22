@@ -497,23 +497,6 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
             <GitFork className="w-3.5 h-3.5 text-[#2563EB]" />
             <span className="text-[#17233C]">Kinship</span>
           </button>
-          <div className="w-[1px] h-3.5 bg-[#B8D4FF]" />
-          <button
-            type="button"
-            disabled={isDeceased}
-            aria-disabled={isDeceased}
-            onClick={() => !isDeceased && onUploadMemory?.(member)}
-            className={`px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1.5 transition-colors ${
-              isDeceased
-                ? 'opacity-40 cursor-not-allowed text-slate-400'
-                : 'hover:bg-[#FEF08A]/50 text-[#17233C] cursor-pointer'
-            }`}
-            title={isDeceased ? `Memories disabled for deceased person (${fullName})` : "Upload Memories (Photos/Videos)"}
-            aria-label={isDeceased ? `Memories disabled for deceased person ${fullName}` : "Upload Memories (Photos/Videos)"}
-          >
-            <ImageIcon className={`w-3.5 h-3.5 ${isDeceased ? 'text-slate-400' : 'text-[#2563EB]'}`} />
-            <span className={isDeceased ? 'text-slate-400' : 'text-[#17233C]'}>Memories</span>
-          </button>
         </div>
       )}
 
@@ -800,92 +783,9 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
             >
               + Spouse
             </button>
-            <button
-              type="button"
-              disabled={isDeceased}
-              aria-disabled={isDeceased}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isDeceased) {
-                  onUploadMemory?.(member);
-                }
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (!isDeceased) {
-                    onUploadMemory?.(member);
-                  }
-                }
-              }}
-              data-testid={`node-memories-btn-${member.id}`}
-              data-action="upload-memory"
-              title={
-                isDeceased
-                  ? `Memories disabled for deceased person (${fullName})`
-                  : `Upload photos or videos for ${fullName} to Memories`
-              }
-              aria-label={
-                isDeceased
-                  ? `Memories disabled for deceased person ${fullName}`
-                  : `Upload Memories for ${fullName}`
-              }
-              className={`px-2 py-0.5 rounded ${
-                isDeceased
-                  ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-40 font-medium text-[10.5px] transition-colors shadow-2xs select-none'
-                  : 'bg-white hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#7EA7D9] text-[#17233C] border border-[#B8D4FF] font-medium text-[10.5px] transition-colors cursor-pointer shadow-2xs select-none'
-              }`}
-            >
-              + Memories
-            </button>
           </div>
         ) : (
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={isDeceased}
-              aria-disabled={isDeceased}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isDeceased) {
-                  onUploadMemory?.(member);
-                }
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (!isDeceased) {
-                    onUploadMemory?.(member);
-                  }
-                }
-              }}
-              data-testid={`node-memories-btn-${member.id}`}
-              data-action="upload-memory"
-              title={
-                isDeceased
-                  ? `Memories disabled for deceased person (${fullName})`
-                  : `Upload photos or videos for ${fullName} to Memories`
-              }
-              aria-label={
-                isDeceased
-                  ? `Memories disabled for deceased person ${fullName}`
-                  : `Upload Memories for ${fullName}`
-              }
-              className={`px-2 py-0.5 rounded ${
-                isDeceased
-                  ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-40 font-medium text-[10.5px] transition-colors shadow-2xs select-none'
-                  : 'bg-white hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#7EA7D9] text-[#17233C] border border-[#B8D4FF] font-medium text-[10.5px] transition-colors cursor-pointer shadow-2xs select-none'
-              }`}
-            >
-              + Memories
-            </button>
-          </div>
+          <div className="flex items-center gap-1" />
         )}
 
         <div className="flex items-center gap-0.5 ml-auto">

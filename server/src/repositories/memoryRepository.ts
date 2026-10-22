@@ -40,6 +40,7 @@ export class MemoryRepository {
     if (!Types.ObjectId.isValid(id)) return null;
     return Memory.findById(id)
       .populate('createdBy', 'displayName email avatar')
+      .populate('addedByMemberId', 'firstName lastName displayName profilePhoto gender')
       .populate('memberIds', 'firstName lastName displayName profilePhoto gender isLiving dateOfBirth dateOfDeath generation')
       .populate('branchIds', 'name accentColor')
       .populate('coverMediaId');
@@ -49,6 +50,7 @@ export class MemoryRepository {
     if (!Types.ObjectId.isValid(id)) return null;
     return Memory.findByIdAndUpdate(id, { $set: data }, { new: true, runValidators: true })
       .populate('createdBy', 'displayName email avatar')
+      .populate('addedByMemberId', 'firstName lastName displayName profilePhoto gender')
       .populate('memberIds', 'firstName lastName displayName profilePhoto gender isLiving dateOfBirth dateOfDeath generation')
       .populate('branchIds', 'name accentColor')
       .populate('coverMediaId');
@@ -160,6 +162,7 @@ export class MemoryRepository {
         .skip(skip)
         .limit(limit)
         .populate('createdBy', 'displayName email avatar')
+        .populate('addedByMemberId', 'firstName lastName displayName profilePhoto gender')
         .populate('memberIds', 'firstName lastName displayName profilePhoto gender')
         .populate('branchIds', 'name accentColor')
         .populate('coverMediaId')

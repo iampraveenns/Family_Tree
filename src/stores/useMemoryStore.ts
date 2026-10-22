@@ -163,14 +163,30 @@ export const useMemoryStore = create<MemoryStoreState>((set, get) => ({
       const res = await apiRequest(`/api/families/${familyId}/memories?${params.toString()}`);
       if (res.success && res.data) {
         const rawMemories: any[] = res.data.memories || [];
-        const normalizedMemories: Memory[] = rawMemories.map((m) => ({
-          ...m,
-          id: m._id || m.id,
-          memberIds: (m.memberIds || []).map((mb: any) => (typeof mb === 'object' ? mb._id || mb.id : mb)),
-          branchIds: (m.branchIds || []).map((b: any) => (typeof b === 'object' ? b._id || b.id : b)),
-          coverMedia: m.coverMediaId && typeof m.coverMediaId === 'object' ? m.coverMediaId : undefined,
-          coverMediaId: m.coverMediaId ? (typeof m.coverMediaId === 'object' ? m.coverMediaId._id || m.coverMediaId.id : m.coverMediaId) : undefined,
-        }));
+        const normalizedMemories: Memory[] = rawMemories.map((m) => {
+          const addedById = m.addedByMemberId
+            ? typeof m.addedByMemberId === 'object'
+              ? (m.addedByMemberId._id || m.addedByMemberId.id)?.toString()
+              : m.addedByMemberId.toString()
+            : undefined;
+
+          const addedByName =
+            m.addedByMemberName ||
+            (m.addedByMemberId && typeof m.addedByMemberId === 'object'
+              ? (m.addedByMemberId.displayName || `${m.addedByMemberId.firstName || ''} ${m.addedByMemberId.lastName || ''}`.trim())
+              : undefined);
+
+          return {
+            ...m,
+            id: m._id || m.id,
+            addedByMemberId: addedById,
+            addedByMemberName: addedByName,
+            memberIds: (m.memberIds || []).map((mb: any) => (typeof mb === 'object' ? mb._id || mb.id : mb)),
+            branchIds: (m.branchIds || []).map((b: any) => (typeof b === 'object' ? b._id || b.id : b)),
+            coverMedia: m.coverMediaId && typeof m.coverMediaId === 'object' ? m.coverMediaId : undefined,
+            coverMediaId: m.coverMediaId ? (typeof m.coverMediaId === 'object' ? m.coverMediaId._id || m.coverMediaId.id : m.coverMediaId) : undefined,
+          };
+        });
         set({ memories: normalizedMemories, isLoading: false });
       } else {
         set({ isLoading: false });

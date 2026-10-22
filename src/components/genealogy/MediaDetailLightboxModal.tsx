@@ -55,6 +55,12 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
     .map((id: any) => memberMap.get(id?.toString()))
     .filter(Boolean) as FamilyMember[];
 
+  const authorMember = (memory.addedByMemberId ? memberMap.get(memory.addedByMemberId) : null) ||
+    (rawMemberIds.length > 0 ? memberMap.get(rawMemberIds[0]?.toString()) : null);
+  const authorName = memory.addedByMemberName ||
+    (authorMember ? (authorMember.displayName || `${authorMember.firstName} ${authorMember.lastName}`.trim()) : null) ||
+    'Family Member';
+
   return (
     <div
       role="dialog"
@@ -83,7 +89,7 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
                 {memory.title}
               </h3>
               <p className="text-[11px] text-slate-500">
-                {mType} Memory {formattedDate ? `• ${formattedDate}` : ''}
+                {mType} Memory {formattedDate ? `• ${formattedDate}` : ''} • Added by <strong className="text-blue-700">{authorName}</strong>
               </p>
             </div>
           </div>

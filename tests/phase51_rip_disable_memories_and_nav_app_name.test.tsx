@@ -20,7 +20,7 @@ vi.mock('reactflow', () => ({
   },
 }));
 
-describe('Phase 51: RIP Disable Memories Button, Nav Bar Family Name Removal & FamilyTree App Name', () => {
+describe('Phase 51: Node Memory Button Removal & Direct Sidebar Flow, Nav Bar Family Name Removal', () => {
   const livingMember: FamilyMember = {
     id: 'mem-living-1',
     familyId: 'fam-1',
@@ -48,7 +48,7 @@ describe('Phase 51: RIP Disable Memories Button, Nav Bar Family Name Removal & F
     createdAt: '2026-01-01T00:00:00.000Z',
   };
 
-  it('1. When a person is RIP, the Memories button is disabled in both popup editbar and bottom action bar', () => {
+  it('1. When a person is RIP, the node does not display any Memory button (managed directly via sidebar)', () => {
     const ripData: HeritageMemberNodeData = {
       member: deceasedMember,
       isSelected: true,
@@ -61,19 +61,16 @@ describe('Phase 51: RIP Disable Memories Button, Nav Bar Family Name Removal & F
 
     const html = renderToString(<HeritageMemberNode data={ripData} />);
 
-    // Bottom action bar memories button is disabled
-    expect(html).toContain('data-testid="node-memories-btn-mem-rip-1"');
-    expect(html).toContain('disabled=""');
-    expect(html).toContain('aria-disabled="true"');
-    expect(html).toContain('cursor-not-allowed opacity-40');
-    expect(html).toContain('Memories disabled for deceased person');
+    // Bottom action bar does not contain memories button
+    expect(html).not.toContain('data-testid="node-memories-btn-mem-rip-1"');
+    expect(html).not.toContain('+ Memories');
 
-    // Top hover/selected popup editbar button is disabled
+    // Top popup editbar does not contain memories button
     expect(html).toContain('data-testid="node-popup-editbar-mem-rip-1"');
-    expect(html).toContain('title="Memories disabled for deceased person (Patriarch Govindan Pattara)"');
+    expect(html).not.toContain('title="Upload Memories (Photos/Videos)"');
   });
 
-  it('2. When a person is living, the Memories button is enabled and active', () => {
+  it('2. When a person is living, the node does not display Memory button (managed directly via sidebar)', () => {
     const livingData: HeritageMemberNodeData = {
       member: livingMember,
       isSelected: true,
@@ -86,13 +83,13 @@ describe('Phase 51: RIP Disable Memories Button, Nav Bar Family Name Removal & F
 
     const html = renderToString(<HeritageMemberNode data={livingData} />);
 
-    // Bottom action bar memories button is NOT disabled
-    expect(html).toContain('data-testid="node-memories-btn-mem-living-1"');
-    expect(html).not.toMatch(/data-testid="node-memories-btn-mem-living-1"[^>]*disabled=""/);
-    expect(html).toContain('cursor-pointer');
+    // Bottom action bar does not contain memories button
+    expect(html).not.toContain('data-testid="node-memories-btn-mem-living-1"');
+    expect(html).not.toContain('+ Memories');
 
-    // Top hover/selected popup editbar button is enabled
-    expect(html).toContain('title="Upload Memories (Photos/Videos)"');
+    // Top popup editbar does not contain memories button
+    expect(html).toContain('data-testid="node-popup-editbar-mem-living-1"');
+    expect(html).not.toContain('title="Upload Memories (Photos/Videos)"');
   });
 
   it('3. AppLayout navigation bar removes family name and displays FamilyTree as application name', () => {
@@ -110,7 +107,7 @@ describe('Phase 51: RIP Disable Memories Button, Nav Bar Family Name Removal & F
     expect(html).not.toContain('data-testid="nav-family-name"');
   });
 
-  it('4. UploadNodeMemoryModal has Add Memories heading, datepicker Date, and no Heritage Collection', () => {
+  it('4. UploadNodeMemoryModal has Add Memory heading, datepicker Date, and supports photos/videos/audios', () => {
     const html = renderToString(
       <MemoryRouter>
         <UploadNodeMemoryModal
@@ -122,25 +119,16 @@ describe('Phase 51: RIP Disable Memories Button, Nav Bar Family Name Removal & F
       </MemoryRouter>
     );
 
-    // Heading is Add Memories (not Upload Memories for...)
-    expect(html).toContain('Add Memories');
-    expect(html).not.toContain('Upload Memories for');
-
-    // Yellow background callout is removed
-    expect(html).not.toContain('bg-[#FEF08A]/45');
+    // Heading is Add Memory
+    expect(html).toContain('Add Memory');
 
     // Date datepicker is present
     expect(html).toContain('id="memory-event-date"');
     expect(html).toContain('type="date"');
-    expect(html).toContain('<span>Date</span>');
-    expect(html).not.toContain('Date or Year (Optional)');
-
-    // Heritage Collection field is removed
-    expect(html).not.toContain('Heritage Collection');
-    expect(html).not.toContain('collection-name');
+    expect(html).toContain('<span>Date (Optional)</span>');
 
     // Supports photos, videos, and audios
-    expect(html).toContain('Select Photo, Video, or Audio');
+    expect(html).toContain('Upload Photo, Video, or Audio');
     expect(html).toContain('accept="image/*,video/*,audio/*"');
   });
 });

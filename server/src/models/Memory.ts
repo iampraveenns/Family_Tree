@@ -8,6 +8,8 @@ export interface IMemory extends Document {
   description?: string;
   memoryType: MemoryType;
   createdBy: Types.ObjectId;
+  addedByMemberId?: Types.ObjectId;
+  addedByMemberName?: string;
   eventDate?: Date;
   eventDateApprox?: string;
   location?: string;
@@ -52,6 +54,15 @@ const MemorySchema = new Schema<IMemory>(
       ref: 'User',
       required: true,
       index: true,
+    },
+    addedByMemberId: {
+      type: Schema.Types.ObjectId,
+      ref: 'FamilyMember',
+      index: true,
+    },
+    addedByMemberName: {
+      type: String,
+      trim: true,
     },
     eventDate: {
       type: Date,

@@ -405,6 +405,11 @@ export const FamilyMemoriesSidebar: React.FC<FamilyMemoriesSidebarProps> = ({
               const audioAsset = memory.media?.find((a) => a.mimeType?.startsWith('audio/'));
               const videoUrl = videoAsset ? resolveMediaStreamUrl(videoAsset) : null;
               const audioUrl = audioAsset ? resolveMediaStreamUrl(audioAsset) : null;
+              const authorMember = (memory.addedByMemberId ? memberMap.get(memory.addedByMemberId) : null) ||
+                (rawMemberIds.length > 0 ? memberMap.get(rawMemberIds[0]?.toString()) : null);
+              const authorName = memory.addedByMemberName ||
+                (authorMember ? (authorMember.displayName || `${authorMember.firstName} ${authorMember.lastName}`.trim()) : null) ||
+                'Family Member';
 
               return (
                 <div
@@ -412,6 +417,38 @@ export const FamilyMemoriesSidebar: React.FC<FamilyMemoriesSidebarProps> = ({
                   data-testid={`memory-card-${memory.id}`}
                   className="bg-white rounded-2xl border border-[#CBD5E1] shadow-2xs hover:shadow-md transition-all overflow-hidden group/card"
                 >
+                  {/* 1. TOP OF POST: Author who added the post (Above media, date, and location) */}
+                  <div
+                    data-testid={`memory-author-${memory.id}`}
+                    className="flex items-center justify-between p-3 border-b border-slate-100 bg-slate-50/70"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <MemberAvatar
+                        member={authorMember || ({ firstName: authorName.split(' ')[0] || 'F', lastName: authorName.split(' ')[1] || 'M' } as any)}
+                        size="sm"
+                        className="w-7 h-7 ring-1.5 ring-blue-500/20 shrink-0"
+                      />
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-[#0F172A] truncate">
+                            {authorName}
+                          </span>
+                          {authorMember?.branchName && (
+                            <span className="text-[10px] text-slate-500 truncate">
+                              • {authorMember.branchName}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-blue-600 font-medium leading-none">
+                          {`Added by ${authorName}`}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60">
+                      Author
+                    </span>
+                  </div>
+
                   {/* Media Preview Slot */}
                   {mType === 'VIDEO' || videoUrl ? (
                     <div className="relative w-full aspect-video bg-black/90 flex items-center justify-center overflow-hidden">
