@@ -122,10 +122,11 @@ describe('Phase 51: Node Memory Button Removal & Direct Sidebar Flow, Nav Bar Fa
     // Heading is Add Memory
     expect(html).toContain('Add Memory');
 
-    // Date datepicker is present
+    // Date datepicker is present and mandatory
     expect(html).toContain('id="memory-event-date"');
     expect(html).toContain('type="date"');
-    expect(html).toContain('<span>Date (Optional)</span>');
+    expect(html).toContain('required=""');
+    expect(html).toContain('Date');
 
     // Supports photos, videos, and audios
     expect(html).toContain('Upload Photo, Video, or Audio');

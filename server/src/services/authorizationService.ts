@@ -12,6 +12,7 @@ import {
   MemoryVisibility,
   MemoryStatus,
   hasPermission,
+  normalizeRole,
 } from '../constants/index.ts';
 import { IMemory } from '../models/Memory.ts';
 import { ForbiddenError } from '../utils/errors.ts';
@@ -76,12 +77,13 @@ export class AuthorizationService {
 
   /**
    * Evaluates resource-scoped permission to view, edit, or delete a specific member.
-   * Respects Role Hierarchy, Branch Scopes, and verified Descendant Traversal.
+   * Strictly enforces 2-role model: ADMIN has full management authority;
+   * VIEWER has strictly read-only access to tree members.
    */
   async canManageMember(
     userId: string | Types.ObjectId,
     familyId: string | Types.ObjectId,
-    targetMemberId: string | Types.ObjectId,
+    _targetMemberId: string | Types.ObjectId,
     permission: Permission
   ): Promise<AuthorizationResult> {
     const membership = await membershipRepository.findByUserAndFamily(userId, familyId);
@@ -89,9 +91,22 @@ export class AuthorizationService {
       return { allowed: false, reason: 'No active membership in this family' };
     }
 
-    // Check base permission for the role
+    const effectiveRole = normalizeRole(membership.role);
+
+    // ADMIN has family-wide tree member management scope
+    if (effectiveRole === Role.ADMIN) {
+      return { allowed: true };
+    }
+
+    // VIEWER is strictly read-only for all tree member operations
+    if (effectiveRole === Role.VIEWER) {
+      if (permission === Permission.VIEW_MEMBER) return { allowed: true };
+      return { allowed: false, reason: 'Viewers have read-only access to tree members' };
+    }
+
+    // Fallback permission check
     const roleHasPerm =
-      hasPermission(membership.role, permission) ||
+      hasPermission(effectiveRole, permission) ||
       (membership.permissions && membership.permissions.includes(permission));
 
     if (!roleHasPerm) {
@@ -101,153 +116,31 @@ export class AuthorizationService {
       };
     }
 
-    // FAMILY_OWNER and FAMILY_ADMIN have family-wide management scope
-    if (membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN) {
-      return { allowed: true };
-    }
-
-    // VIEWERS cannot perform write/delete operations
-    if (membership.role === Role.VIEWER) {
-      if (permission === Permission.VIEW_MEMBER) return { allowed: true };
-      return { allowed: false, reason: 'Viewers have read-only access' };
-    }
-
-    const targetStr = targetMemberId.toString();
-    const userLinkedMemberStr = membership.memberId ? membership.memberId.toString() : null;
-
-    // Self-management: Members and Managers can edit their own member profile
-    const isSelf = userLinkedMemberStr !== null && userLinkedMemberStr === targetStr;
-    if (isSelf) {
-      // Self cannot delete self
-      if (permission === Permission.DELETE_MEMBER) {
-        return { allowed: false, reason: 'Members cannot delete their own profile' };
-      }
-      return { allowed: true };
-    }
-
-    // Standard MEMBER: Can only edit self
-    if (membership.role === Role.MEMBER) {
-      if (permission === Permission.VIEW_MEMBER) return { allowed: true };
-      return { allowed: false, reason: 'Standard members can only modify their own profile' };
-    }
-
-    // PARENT_MANAGER: Can manage self and verified descendants
-    if (membership.role === Role.PARENT_MANAGER) {
-      if (!userLinkedMemberStr) {
-        return {
-          allowed: false,
-          reason: 'Parent manager must have a linked family member to manage descendants',
-        };
-      }
-
-      const descendants = await this.getDescendantMemberIds(familyId, userLinkedMemberStr);
-      if (descendants.has(targetStr)) {
-        return { allowed: true };
-      }
-
-      return {
-        allowed: false,
-        reason: 'Parent managers can only manage themselves and their verified descendants',
-      };
-    }
-
-    // BRANCH_MANAGER: Can manage members within their assigned branch
-    if (membership.role === Role.BRANCH_MANAGER) {
-      const targetMember = await memberRepository.findById(targetMemberId);
-      if (!targetMember) {
-        return { allowed: false, reason: 'Target member not found' };
-      }
-
-      if (!membership.branchId) {
-        return { allowed: false, reason: 'Branch manager has no assigned branch' };
-      }
-
-      const assignedBranchStr = membership.branchId.toString();
-      const memberBranches = (targetMember.branchIds || []).map((b) => b.toString());
-
-      if (memberBranches.includes(assignedBranchStr)) {
-        return { allowed: true };
-      }
-
-      return {
-        allowed: false,
-        reason: 'Branch managers can only manage members in their assigned branch',
-      };
-    }
-
-    return { allowed: false, reason: 'Insufficient authority for target member' };
+    return { allowed: true };
   }
 
   /**
    * Evaluates authorization to create a new member with an associated parent relationship.
-   * Enforces that Parent Managers only attach children to themselves or their descendants.
+   * Only ADMIN can create family tree members.
    */
   async canCreateMemberWithRelationship(
     userId: string | Types.ObjectId,
     familyId: string | Types.ObjectId,
-    parentId?: string | Types.ObjectId,
-    branchId?: string | Types.ObjectId
+    _parentId?: string | Types.ObjectId,
+    _branchId?: string | Types.ObjectId
   ): Promise<AuthorizationResult> {
     const membership = await membershipRepository.findByUserAndFamily(userId, familyId);
     if (!membership || membership.status !== 'ACTIVE') {
       return { allowed: false, reason: 'No active membership in this family' };
     }
 
-    if (membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN) {
+    const effectiveRole = normalizeRole(membership.role);
+    if (effectiveRole === Role.ADMIN) {
       return { allowed: true };
     }
 
-    if (membership.role === Role.VIEWER || membership.role === Role.CONTRIBUTOR) {
-      return { allowed: false, reason: 'Role does not permit member creation' };
-    }
-
-    // PARENT_MANAGER creating a child:
-    if (membership.role === Role.PARENT_MANAGER) {
-      if (!parentId) {
-        return {
-          allowed: false,
-          reason: 'Parent managers must specify an authorized parent when creating a member',
-        };
-      }
-
-      const userLinkedMemberStr = membership.memberId ? membership.memberId.toString() : null;
-      if (!userLinkedMemberStr) {
-        return {
-          allowed: false,
-          reason: 'Parent manager is not linked to a family member node',
-        };
-      }
-
-      const parentStr = parentId.toString();
-      if (parentStr === userLinkedMemberStr) {
-        // Adding child to self
-        return { allowed: true };
-      }
-
-      // Or adding child to a descendant (e.g. grandchild)
-      const descendants = await this.getDescendantMemberIds(familyId, userLinkedMemberStr);
-      if (descendants.has(parentStr)) {
-        return { allowed: true };
-      }
-
-      return {
-        allowed: false,
-        reason: 'Parent managers can only add children to themselves or their descendants',
-      };
-    }
-
-    // BRANCH_MANAGER:
-    if (membership.role === Role.BRANCH_MANAGER) {
-      if (branchId && membership.branchId && branchId.toString() === membership.branchId.toString()) {
-        return { allowed: true };
-      }
-      return {
-        allowed: false,
-        reason: 'Branch managers can only create members in their assigned branch',
-      };
-    }
-
-    return { allowed: false, reason: 'Insufficient authority to create member' };
+    return { allowed: false, reason: 'Role does not permit member creation' };
+  }
   }
 
   /**
@@ -256,78 +149,29 @@ export class AuthorizationService {
   async canManageRelationship(
     userId: string | Types.ObjectId,
     familyId: string | Types.ObjectId,
-    sourceMemberId: string | Types.ObjectId,
-    targetMemberId: string | Types.ObjectId,
-    relationshipType: RelationshipType
+    _sourceMemberId: string | Types.ObjectId,
+    _targetMemberId: string | Types.ObjectId,
+    _relationshipType: RelationshipType
   ): Promise<AuthorizationResult> {
     const membership = await membershipRepository.findByUserAndFamily(userId, familyId);
     if (!membership || membership.status !== 'ACTIVE') {
       return { allowed: false, reason: 'No active membership in this family' };
     }
 
-    if (membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN) {
+    const effectiveRole = normalizeRole(membership.role);
+    if (effectiveRole === Role.ADMIN) {
       return { allowed: true };
     }
 
-    if (membership.role === Role.VIEWER || membership.role === Role.CONTRIBUTOR) {
-      return { allowed: false, reason: 'Role does not permit managing relationships' };
-    }
-
-    const userLinkedMemberStr = membership.memberId ? membership.memberId.toString() : null;
-    if (!userLinkedMemberStr) {
-      return { allowed: false, reason: 'User must be linked to a member node' };
-    }
-
-    const sourceStr = sourceMemberId.toString();
-    const targetStr = targetMemberId.toString();
-
-    // PARENT_MANAGER:
-    if (membership.role === Role.PARENT_MANAGER) {
-      const descendants = await this.getDescendantMemberIds(familyId, userLinkedMemberStr);
-
-      if (relationshipType === RelationshipType.PARENT) {
-        // source is parent, target is child
-        // Allowed if parent is self or descendant
-        const isParentSelfOrDescendant = sourceStr === userLinkedMemberStr || descendants.has(sourceStr);
-        if (isParentSelfOrDescendant) {
-          return { allowed: true };
-        }
-      }
-
-      if (relationshipType === RelationshipType.CHILD) {
-        // target is parent, source is child
-        const isParentSelfOrDescendant = targetStr === userLinkedMemberStr || descendants.has(targetStr);
-        if (isParentSelfOrDescendant) {
-          return { allowed: true };
-        }
-      }
-
-      if (relationshipType === RelationshipType.SPOUSE) {
-        // Can add spouse to self or to a descendant
-        if (sourceStr === userLinkedMemberStr || targetStr === userLinkedMemberStr) {
-          return { allowed: true };
-        }
-        if (descendants.has(sourceStr) || descendants.has(targetStr)) {
-          return { allowed: true };
-        }
-      }
-
-      return {
-        allowed: false,
-        reason: 'Parent managers cannot manage relationships between unrelated family members',
-      };
-    }
-
-    return { allowed: false, reason: 'Insufficient authority to manage relationships' };
+    return { allowed: false, reason: 'Role does not permit managing relationships' };
   }
 
   /**
-   * Evaluates role changes, enforcing the Role Hierarchy and Family Owner protections:
-   * 1. Self-escalation prevention (user cannot change own role)
-   * 2. Cannot demote or remove the final FAMILY_OWNER
-   * 3. Cannot promote someone to equal/higher rank than actor's own role
-   * 4. Cannot modify a user who holds equal/higher rank than actor
-   * 5. Only FAMILY_OWNER can appoint another FAMILY_OWNER
+   * Evaluates role changes, enforcing the Single Admin Constraint:
+   * 1. A family can have strictly ONE ADMIN (the creator or explicitly transferred to another user).
+   * 2. Only the current ADMIN can modify roles.
+   * 3. Cannot change own role directly (ownership transfer must target another member).
+   * 4. Promoting another user to ADMIN is an ownership transfer (transfers sole ADMIN to that user).
    */
   async canModifyMembershipRole(
     actorUserId: string | Types.ObjectId,
@@ -345,60 +189,28 @@ export class AuthorizationService {
       return { allowed: false, reason: 'Target membership not found in this family' };
     }
 
-    // Rule 1: Cannot change own role (prevent self-escalation)
+    // Rule 1: Cannot change own role directly
     if (actorMembership.userId.toString() === targetMembership.userId.toString()) {
       return { allowed: false, reason: 'Users are strictly prohibited from modifying their own role' };
     }
 
-    // Rule 2: Must have MANAGE_ROLES permission
-    const hasManageRoles =
-      hasPermission(actorMembership.role, Permission.MANAGE_ROLES) ||
-      (actorMembership.permissions && actorMembership.permissions.includes(Permission.MANAGE_ROLES));
-
-    if (!hasManageRoles) {
-      return { allowed: false, reason: 'Actor lacks MANAGE_ROLES permission' };
+    const actorEffectiveRole = normalizeRole(actorMembership.role);
+    if (actorEffectiveRole !== Role.ADMIN) {
+      return { allowed: false, reason: 'Only the Family ADMIN can manage roles' };
     }
 
-    // Rule 3: Protection for final FAMILY_OWNER
-    if (targetMembership.role === Role.FAMILY_OWNER && newRole !== Role.FAMILY_OWNER) {
-      const ownerCount = await membershipRepository.countOwners(familyId);
-      if (ownerCount <= 1) {
+    const targetCurrentRole = normalizeRole(targetMembership.role);
+    const requestedRole = normalizeRole(newRole);
+
+    // If target is currently ADMIN and actor attempts to demote them without transfer
+    if (targetCurrentRole === Role.ADMIN && requestedRole !== Role.ADMIN) {
+      const adminCount = await membershipRepository.countAdmins(familyId);
+      if (adminCount <= 1) {
         return {
           allowed: false,
-          reason: 'Cannot demote the final FAMILY_OWNER. Appoint another owner first.',
+          reason: 'Cannot demote the sole ADMIN. Transfer ownership to another user first.',
         };
       }
-    }
-
-    // FAMILY_OWNER can assign any role
-    if (actorMembership.role === Role.FAMILY_OWNER) {
-      return { allowed: true };
-    }
-
-    // For non-owners:
-    const actorRank = RoleRank[actorMembership.role] || 0;
-    const targetCurrentRank = RoleRank[targetMembership.role] || 0;
-    const requestedRank = RoleRank[newRole] || 0;
-
-    // Rule 4: Cannot modify a member whose current rank is equal to or higher than actor
-    if (targetCurrentRank >= actorRank) {
-      return {
-        allowed: false,
-        reason: `Cannot modify members with equal or higher role rank (${targetMembership.role})`,
-      };
-    }
-
-    // Rule 5: Cannot promote someone to equal or higher rank than actor
-    if (requestedRank >= actorRank) {
-      return {
-        allowed: false,
-        reason: `Cannot grant a role (${newRole}) equal to or higher than actor's role (${actorMembership.role})`,
-      };
-    }
-
-    // Rule 6: Only FAMILY_OWNER can appoint another FAMILY_OWNER
-    if (newRole === Role.FAMILY_OWNER) {
-      return { allowed: false, reason: 'Only the Family Owner can appoint another Family Owner' };
     }
 
     return { allowed: true };
@@ -449,11 +261,12 @@ export class AuthorizationService {
       return { allowed: false, reason: 'Active family membership is required to view family heritage memories' };
     }
 
-    // Archived memories are only visible to Owners, Admins, and Creator
+    const effectiveRole = normalizeRole(membership.role);
+
+    // Archived memories are only visible to Admins and Creator
     if (memory.status === MemoryStatus.ARCHIVED) {
       const isPrivileged =
-        membership.role === Role.FAMILY_OWNER ||
-        membership.role === Role.FAMILY_ADMIN ||
+        effectiveRole === Role.ADMIN ||
         memory.createdBy.toString() === actorUserId.toString();
       return {
         allowed: isPrivileged,
@@ -461,8 +274,8 @@ export class AuthorizationService {
       };
     }
 
-    // Family Owners and Admins have global family visibility
-    if (membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN) {
+    // Family Admins have global family visibility
+    if (effectiveRole === Role.ADMIN) {
       return { allowed: true };
     }
 
@@ -526,8 +339,10 @@ export class AuthorizationService {
       return { allowed: false, reason: 'Active family membership is required' };
     }
 
-    // Owners and Admins have full management authority
-    if (membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN) {
+    const effectiveRole = normalizeRole(membership.role);
+
+    // Admins have full management authority
+    if (effectiveRole === Role.ADMIN) {
       return { allowed: true };
     }
 
@@ -679,38 +494,12 @@ export class AuthorizationService {
       return { allowed: false, reason: 'Active family membership is required' };
     }
 
-    // FAMILY_OWNER and FAMILY_ADMIN have full branch authority
-    if (actorMembership.role === Role.FAMILY_OWNER || actorMembership.role === Role.FAMILY_ADMIN) {
+    const effectiveRole = normalizeRole(actorMembership.role);
+    if (effectiveRole === Role.ADMIN) {
       return { allowed: true };
     }
 
-    // Creating or deleting branches is restricted to Family Owners and Admins
-    if (action === 'CREATE' || action === 'DELETE') {
-      return { allowed: false, reason: 'Only Family Owners or Admins can create or delete branches' };
-    }
-
-    // BRANCH_MANAGER can update/archive/assign for their own branch
-    if (actorMembership.role === Role.BRANCH_MANAGER && branchId) {
-      const targetBranchStr = branchId.toString();
-      // Check actor's membership branchId
-      if (actorMembership.branchId && actorMembership.branchId.toString() === targetBranchStr) {
-        return { allowed: true };
-      }
-
-      // Or check if actor is in branch's managerIds
-      const { Branch } = await import('../models/Branch.ts');
-      const branch = await Branch.findOne({ _id: branchId, familyId });
-      if (branch && branch.managerIds.some((m) => m.toString() === actorUserId.toString())) {
-        return { allowed: true };
-      }
-
-      return {
-        allowed: false,
-        reason: 'Branch managers can only manage their own designated branch',
-      };
-    }
-
-    return { allowed: false, reason: 'Actor lacks MANAGE_BRANCH permission' };
+    return { allowed: false, reason: 'Only the Family ADMIN can manage branches' };
   }
 
   /**
@@ -719,36 +508,21 @@ export class AuthorizationService {
   async canTransferMember(
     actorUserId: string | Types.ObjectId,
     familyId: string | Types.ObjectId,
-    memberId: string | Types.ObjectId,
-    fromBranchId?: string | Types.ObjectId,
-    targetBranchId?: string | Types.ObjectId
+    _memberId: string | Types.ObjectId,
+    _fromBranchId?: string | Types.ObjectId,
+    _targetBranchId?: string | Types.ObjectId
   ): Promise<AuthorizationResult> {
     const actorMembership = await membershipRepository.findByUserAndFamily(actorUserId, familyId);
     if (!actorMembership || actorMembership.status !== 'ACTIVE') {
       return { allowed: false, reason: 'Active family membership is required' };
     }
 
-    if (actorMembership.role === Role.FAMILY_OWNER || actorMembership.role === Role.FAMILY_ADMIN) {
+    const effectiveRole = normalizeRole(actorMembership.role);
+    if (effectiveRole === Role.ADMIN) {
       return { allowed: true };
     }
 
-    // Branch managers can only transfer members if they manage both source and destination branch
-    if (actorMembership.role === Role.BRANCH_MANAGER) {
-      const actorBranchStr = actorMembership.branchId ? actorMembership.branchId.toString() : '';
-      const targetStr = targetBranchId ? targetBranchId.toString() : '';
-      const fromStr = fromBranchId ? fromBranchId.toString() : '';
-
-      if (actorBranchStr && actorBranchStr === targetStr && (!fromStr || actorBranchStr === fromStr)) {
-        return { allowed: true };
-      }
-
-      return {
-        allowed: false,
-        reason: 'Branch managers cannot transfer members outside their branch scope',
-      };
-    }
-
-    return { allowed: false, reason: 'Actor lacks permission to transfer members between branches' };
+    return { allowed: false, reason: 'Only the Family ADMIN can transfer members between branches' };
   }
 
   /**
@@ -788,7 +562,7 @@ export class AuthorizationService {
       }
     }
 
-    const role = membership.role;
+    const role = normalizeRole(membership.role);
     const permissions = membership.permissions?.length
       ? membership.permissions
       : DEFAULT_ROLE_PERMISSIONS[role] || [];
@@ -796,73 +570,26 @@ export class AuthorizationService {
     const whatYouCanDo: string[] = [];
     const whatYouCannotDo: string[] = [];
 
-    if (role === Role.FAMILY_OWNER) {
+    if (role === Role.ADMIN) {
       whatYouCanDo.push(
-        'Full administrative authority across all family members, branches, and vault memories',
-        'Appoint or demote any role including Family Owners and Family Admins',
-        'Invite new members and revoke or resend outstanding invitations',
-        'Create, rename, archive, or delete any branch',
-        'Access the full immutable audit and activity log',
-        'Delete the family vault or export heritage archives'
-      );
-    } else if (role === Role.FAMILY_ADMIN) {
-      whatYouCanDo.push(
-        'Manage members, relationships, and all branch structures',
-        'Invite relatives as Branch Managers, Parent Managers, Contributors, or Viewers',
-        'Create, archive, and assign managers to branches',
-        'Review activity and audit logs',
-        'Manage all memories, stories, and media assets'
-      );
-      whatYouCannotDo.push(
-        'Cannot appoint other Family Owners or demote existing Family Owners',
-        'Cannot modify or suspend fellow Family Admins',
-        'Cannot delete the primary family vault'
-      );
-    } else if (role === Role.BRANCH_MANAGER) {
-      whatYouCanDo.push(
-        `Manage records and relationships within your designated branch (${branch?.name || 'Assigned Branch'})`,
-        'Upload and curate branch memories and stories',
-        'Invite new relatives into your branch scope',
-        'Update branch information and settings'
-      );
-      whatYouCannotDo.push(
-        'Cannot modify members or memories in other family branches',
-        'Cannot assign or modify administrative roles',
-        'Cannot delete or create other family branches',
-        'Cannot view restricted private memories outside your branch'
-      );
-    } else if (role === Role.PARENT_MANAGER) {
-      whatYouCanDo.push(
-        'Manage records, profile details, and relationships strictly for your direct descendants',
-        'Upload memories featuring your descendants and immediate family',
-        'Tag descendants in photos and stories'
-      );
-      whatYouCannotDo.push(
-        'Cannot edit records of ancestors, siblings, or collateral cousins',
-        'Cannot manage branch configurations or role assignments',
-        'Cannot send administrative invitations'
-      );
-    } else if (role === Role.CONTRIBUTOR) {
-      whatYouCanDo.push(
-        'Upload photos, stories, audio, documents, and recipes',
-        'Suggest corrections and additions to family members',
-        'Participate in family discussions and milestones'
-      );
-      whatYouCannotDo.push(
-        'Cannot modify member relationships or core identity attributes directly',
-        'Cannot manage branch structures or user permissions',
-        'Cannot suspend other members or manage invitations'
+        'Full administrative authority across all family members, relationships, and branches',
+        'Create, edit, and delete family tree member nodes (+ Add Relative, + Child, + Spouse, edit profile, delete member)',
+        'Create, edit, and delete relationships and branch structures',
+        'Upload, edit, and delete family memories and vault assets',
+        'Manage family settings, invitations, exports, and backups'
       );
     } else {
+      // VIEWER
       whatYouCanDo.push(
-        'Browse the interactive family tree and generation timeline',
-        'View shared stories, photos, audio, documents, and recipes',
-        'Explore genealogy kinship paths'
+        'Browse the interactive family tree, search relatives, and filter branches',
+        'Explore genealogy kinship paths, view member profiles, fit family, focus, fullscreen, and show map',
+        'View shared stories, photos, audio, documents, and recipes in the family vault',
+        'Upload new memories and stories to celebrate family heritage'
       );
       whatYouCannotDo.push(
-        'Cannot modify tree members or kinship edges',
-        'Cannot upload or delete memories',
-        'Cannot manage branch or administrative settings'
+        'Strictly read-only family tree: cannot add, edit, or delete member nodes',
+        'Cannot create, edit, or delete family relationships or branches',
+        'Cannot manage family settings, roles, or administrative exports'
       );
     }
 
@@ -876,17 +603,17 @@ export class AuthorizationService {
       branch,
       permissions,
       scope: {
-        isFamilyWide: [Role.FAMILY_OWNER, Role.FAMILY_ADMIN].includes(role),
-        branchScope: role === Role.BRANCH_MANAGER ? branch?.name || 'Assigned Branch' : null,
-        parentScope: role === Role.PARENT_MANAGER ? 'Descendants only' : null,
+        isFamilyWide: role === Role.ADMIN,
+        branchScope: null,
+        parentScope: null,
       },
       capabilities: {
         canInviteMembers: hasPermission(role, Permission.INVITE_MEMBER),
         canManageRoles: hasPermission(role, Permission.MANAGE_ROLES),
         canManageBranches: hasPermission(role, Permission.MANAGE_BRANCH),
         canCreateMemories: hasPermission(role, Permission.UPLOAD_MEMORY),
-        canEditAllMembers: [Role.FAMILY_OWNER, Role.FAMILY_ADMIN].includes(role),
-        canViewAuditLogs: [Role.FAMILY_OWNER, Role.FAMILY_ADMIN].includes(role),
+        canEditAllMembers: role === Role.ADMIN,
+        canViewAuditLogs: role === Role.ADMIN,
       },
       whatYouCanDo,
       whatYouCannotDo,

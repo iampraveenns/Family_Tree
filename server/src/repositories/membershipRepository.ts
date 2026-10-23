@@ -32,13 +32,30 @@ export class MembershipRepository {
       .exec();
   }
 
-  async countOwners(familyId: string | Types.ObjectId): Promise<number> {
+  async countAdmins(familyId: string | Types.ObjectId): Promise<number> {
     if (!Types.ObjectId.isValid(familyId)) return 0;
     return FamilyMembership.countDocuments({
       familyId,
-      role: Role.FAMILY_OWNER,
+      role: { $in: [Role.ADMIN, 'ADMIN', 'FAMILY_OWNER', 'FAMILY_ADMIN'] },
       status: 'ACTIVE',
     }).exec();
+  }
+
+  async findAdmin(familyId: string | Types.ObjectId): Promise<IFamilyMembership | null> {
+    if (!Types.ObjectId.isValid(familyId)) return null;
+    return FamilyMembership.findOne({
+      familyId,
+      role: { $in: [Role.ADMIN, 'ADMIN', 'FAMILY_OWNER', 'FAMILY_ADMIN'] },
+      status: 'ACTIVE',
+    }).exec();
+  }
+
+  async countOwners(familyId: string | Types.ObjectId): Promise<number> {
+    return this.countAdmins(familyId);
+  }
+
+  async findOwner(familyId: string | Types.ObjectId): Promise<IFamilyMembership | null> {
+    return this.findAdmin(familyId);
   }
 
   async create(data: Partial<IFamilyMembership>): Promise<IFamilyMembership> {

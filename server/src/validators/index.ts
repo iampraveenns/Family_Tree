@@ -123,7 +123,9 @@ export const createMemberSchema = z.object({
   branchIds: z.array(z.string()).optional(),
   generation: z.number().int().min(1).max(20).optional(),
   siblingOrder: z.number().int().min(0).optional().nullable(),
-  displayOrder: z.number().int().min(0).optional().nullable(),
+  email: z.string().optional(),
+  registeredEmail: z.string().optional(),
+  linkedUserId: z.string().optional(),
   privacySettings: z
     .object({
       visibility: z.enum(['FAMILY', 'PUBLIC', 'PRIVATE']).optional(),

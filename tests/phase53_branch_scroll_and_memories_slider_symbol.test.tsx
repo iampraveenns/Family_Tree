@@ -2,12 +2,12 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
-describe('Phase 53: 4-Branch Horizontal Scroll and Memories Slider Symbol Removal', () => {
+describe('Phase 53: 4-Branch Horizontal Scroll and Memories Slider Border-Radius & Button Removal', () => {
   const familyTreePagePath = path.resolve(__dirname, '../src/pages/family/FamilyTreePage.tsx');
   const familyTreePageContent = fs.readFileSync(familyTreePagePath, 'utf-8');
 
-  describe('1. Right Memories slider button and toolbar button symbols removed', () => {
-    it('verifies floating-memories-tab-button does not contain any Sparkles or icon symbol', () => {
+  describe('1. Right Memories slider button and toolbar button removal', () => {
+    it('verifies floating-memories-tab-button has border-radius 5px and does not contain Sparkles or icon symbol', () => {
       // Find the right memories slider tab button
       const floatingSliderMatch = familyTreePageContent.match(/data-testid="floating-memories-tab-button"[\s\S]*?<\/button>/);
       expect(floatingSliderMatch).toBeTruthy();
@@ -20,20 +20,22 @@ describe('Phase 53: 4-Branch Horizontal Scroll and Memories Slider Symbol Remova
 
       // Must contain Memories text and count
       expect(buttonContent).toContain('Memories ({memories.length})');
+
+      // Border radius must be 5px (don't go more than that)
+      expect(buttonContent).toContain('rounded-l-[5px]');
+      expect(buttonContent).toMatch(/borderTopLeftRadius:\s*['"]5px['"]/);
+      expect(buttonContent).toMatch(/borderBottomLeftRadius:\s*['"]5px['"]/);
     });
 
-    it('verifies toolbar toggle-memories-sidebar-button does not contain any Sparkles or icon symbol', () => {
-      // Find the toolbar memories button
-      const toolbarBtnMatch = familyTreePageContent.match(/data-testid="toggle-memories-sidebar-button"[\s\S]*?<\/button>/);
-      expect(toolbarBtnMatch).toBeTruthy();
-      const toolbarContent = toolbarBtnMatch![0];
+    it('verifies toolbar toggle-memories-sidebar-button near Add Relative has been removed', () => {
+      // Near "Add Relative" button in the top toolbar
+      const addRelativeMatch = familyTreePageContent.match(/Add Relative[\s\S]*?<\/Button>([\s\S]*?)<\/div>\s*<\/div>/);
+      expect(addRelativeMatch).toBeTruthy();
+      const areaNearAddRelative = addRelativeMatch![1];
 
-      // Must NOT contain Sparkles or any icon component
-      expect(toolbarContent).not.toContain('<Sparkles');
-      expect(toolbarContent).not.toContain('FolderHeart');
-
-      // Must contain text and count
-      expect(toolbarContent).toContain('<span>Memories</span>');
+      // Must NOT contain any memories toggle button near Add Relative
+      expect(areaNearAddRelative).not.toContain('toggle-memories-sidebar-button');
+      expect(areaNearAddRelative).not.toContain('<span>Memories</span>');
     });
   });
 

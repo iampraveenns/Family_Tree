@@ -199,6 +199,11 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
       return;
     }
 
+    if (!eventDate || !eventDate.trim()) {
+      setFormError('Please select a date for this memory. Date is mandatory.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setFormError(null);
@@ -543,11 +548,12 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
           <div className="space-y-1">
             <label htmlFor="memory-event-date" className="text-xs font-semibold text-[#17233C] flex items-center gap-1">
               <Calendar className="w-3 h-3 text-[#64748B]" />
-              <span>Date (Optional)</span>
+              <span>Date <span className="text-red-500">*</span></span>
             </label>
             <input
               id="memory-event-date"
               type="date"
+              required
               value={eventDate}
               onChange={(e) => setEventDate(e.target.value)}
               className="w-full px-3 py-1.5 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none cursor-pointer"
@@ -598,7 +604,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
 
           <Button
             type="submit"
-            disabled={isSubmitting || !title.trim()}
+            disabled={isSubmitting || !title.trim() || !eventDate.trim()}
             className="px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (

@@ -40,8 +40,8 @@ const FamilyMembershipSchema = new Schema<IFamilyMembership>(
     },
     role: {
       type: String,
-      enum: Object.values(Role),
-      default: Role.MEMBER,
+      enum: ['ADMIN', 'VIEWER', 'FAMILY_OWNER', 'FAMILY_ADMIN', 'BRANCH_MANAGER', 'PARENT_MANAGER', 'MEMBER', 'CONTRIBUTOR'],
+      default: Role.VIEWER,
       index: true,
     },
     status: {

@@ -1625,34 +1625,6 @@ const FamilyTreeInner: React.FC = () => {
           >
             {members.length === 0 ? 'Add Root Ancestor' : 'Add Relative'}
           </Button>
-
-          {/* Ask Gemini Style Family Memories Sidebar Toggle Button */}
-          <button
-            type="button"
-            data-testid="toggle-memories-sidebar-button"
-            onClick={() => {
-              if (activeDrawerMember) {
-                setDrawerMember(null);
-                setSelectedMember(null);
-              }
-              setIsMemoriesSidebarOpen((prev) => !prev);
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold text-xs transition-all cursor-pointer shadow-xs ${
-              isMemoriesSidebarOpen
-                ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white ring-2 ring-indigo-200 shadow-sm'
-                : 'bg-white hover:bg-slate-50 text-[#1E293B] border border-slate-300 hover:border-slate-400'
-            }`}
-            title="Toggle Memories Sidebar (Photos, Videos, Audios & Media)"
-          >
-            <span>Memories</span>
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                isMemoriesSidebarOpen ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-700'
-              }`}
-            >
-              {memories.length}
-            </span>
-          </button>
         </div>
       </div>
 
@@ -1763,7 +1735,8 @@ const FamilyTreeInner: React.FC = () => {
             type="button"
             data-testid="floating-memories-tab-button"
             onClick={() => setIsMemoriesSidebarOpen(true)}
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-20 flex items-center justify-center bg-gradient-to-b from-blue-600 via-indigo-600 to-purple-600 text-white py-3 px-2 rounded-l-2xl shadow-xl hover:px-2.5 transition-all cursor-pointer group"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-20 flex items-center justify-center bg-gradient-to-b from-blue-600 via-indigo-600 to-purple-600 text-white py-3 px-2 rounded-l-[5px] shadow-xl hover:px-2.5 transition-all cursor-pointer group"
+            style={{ borderTopLeftRadius: '5px', borderBottomLeftRadius: '5px', borderTopRightRadius: '0px', borderBottomRightRadius: '0px' }}
             title="Open Family Memories Sidebar (Photos, Videos, Audios & Media)"
           >
             <span className="[writing-mode:vertical-rl] text-[11px] font-bold tracking-wider select-none py-1">

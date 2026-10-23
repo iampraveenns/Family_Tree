@@ -1,21 +1,40 @@
 export enum Role {
-  FAMILY_OWNER = 'FAMILY_OWNER',
-  FAMILY_ADMIN = 'FAMILY_ADMIN',
-  BRANCH_MANAGER = 'BRANCH_MANAGER',
-  PARENT_MANAGER = 'PARENT_MANAGER',
-  MEMBER = 'MEMBER',
-  CONTRIBUTOR = 'CONTRIBUTOR',
+  ADMIN = 'ADMIN',
   VIEWER = 'VIEWER',
+  // Backward compatibility mappings
+  FAMILY_OWNER = 'ADMIN',
+  FAMILY_ADMIN = 'ADMIN',
+  BRANCH_MANAGER = 'ADMIN',
+  PARENT_MANAGER = 'VIEWER',
+  MEMBER = 'VIEWER',
+  CONTRIBUTOR = 'VIEWER',
 }
 
-export const RoleRank: Record<Role, number> = {
-  [Role.FAMILY_OWNER]: 100,
-  [Role.FAMILY_ADMIN]: 80,
-  [Role.BRANCH_MANAGER]: 60,
-  [Role.PARENT_MANAGER]: 40,
-  [Role.CONTRIBUTOR]: 30,
-  [Role.MEMBER]: 20,
+export function normalizeRole(role?: string | null): Role {
+  if (!role) return Role.VIEWER;
+  const upper = String(role).toUpperCase().trim();
+  if (
+    upper === 'ADMIN' ||
+    upper === 'FAMILY_OWNER' ||
+    upper === 'FAMILY_ADMIN' ||
+    upper === 'BRANCH_MANAGER'
+  ) {
+    return Role.ADMIN;
+  }
+  return Role.VIEWER;
+}
+
+export const RoleRank: Record<string, number> = {
+  [Role.ADMIN]: 100,
   [Role.VIEWER]: 10,
+  ADMIN: 100,
+  VIEWER: 10,
+  FAMILY_OWNER: 100,
+  FAMILY_ADMIN: 100,
+  BRANCH_MANAGER: 100,
+  PARENT_MANAGER: 10,
+  CONTRIBUTOR: 10,
+  MEMBER: 10,
 };
 
 export enum AuthorizationScope {
@@ -236,82 +255,47 @@ export enum AuditAction {
   RESTORE_VALIDATED = 'RESTORE_VALIDATED',
 }
 
-export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  [Role.FAMILY_OWNER]: Object.values(Permission),
-  [Role.FAMILY_ADMIN]: [
-    Permission.VIEW_FAMILY,
-    Permission.VIEW_MEMBER,
-    Permission.CREATE_MEMBER,
-    Permission.EDIT_MEMBER,
-    Permission.DELETE_MEMBER,
-    Permission.ADD_CHILD,
-    Permission.ADD_PARENT,
-    Permission.ADD_SPOUSE,
-    Permission.ADD_SIBLING,
-    Permission.REMOVE_RELATIONSHIP,
-    Permission.MANAGE_BRANCH,
-    Permission.MANAGE_MEMBERS,
-    Permission.UPLOAD_MEMORY,
-    Permission.EDIT_MEMORY,
-    Permission.DELETE_MEMORY,
-    Permission.CREATE_EVENT,
-    Permission.EDIT_EVENT,
-    Permission.DELETE_EVENT,
-    Permission.INVITE_MEMBER,
-    Permission.MANAGE_ROLES,
-    Permission.VIEW_AUDIT_LOG,
-    Permission.APPROVE_CHANGES,
-    Permission.EXPORT_DATA,
-    Permission.MANAGE_BACKUP,
-  ],
-  [Role.BRANCH_MANAGER]: [
-    Permission.VIEW_FAMILY,
-    Permission.VIEW_MEMBER,
-    Permission.CREATE_MEMBER,
-    Permission.EDIT_MEMBER,
-    Permission.ADD_CHILD,
-    Permission.ADD_PARENT,
-    Permission.ADD_SPOUSE,
-    Permission.ADD_SIBLING,
-    Permission.REMOVE_RELATIONSHIP,
-    Permission.MANAGE_BRANCH,
-    Permission.UPLOAD_MEMORY,
-    Permission.EDIT_MEMORY,
-    Permission.CREATE_EVENT,
-    Permission.EDIT_EVENT,
-    Permission.INVITE_MEMBER,
-  ],
-  [Role.PARENT_MANAGER]: [
-    Permission.VIEW_FAMILY,
-    Permission.VIEW_MEMBER,
-    Permission.CREATE_MEMBER,
-    Permission.EDIT_MEMBER,
-    Permission.ADD_CHILD,
-    Permission.ADD_SPOUSE,
-    Permission.REMOVE_RELATIONSHIP,
-    Permission.UPLOAD_MEMORY,
-    Permission.EDIT_MEMORY,
-    Permission.CREATE_EVENT,
-  ],
-  [Role.MEMBER]: [
-    Permission.VIEW_FAMILY,
-    Permission.VIEW_MEMBER,
-    Permission.EDIT_MEMBER,
-    Permission.UPLOAD_MEMORY,
-    Permission.CREATE_EVENT,
-  ],
-  [Role.CONTRIBUTOR]: [
-    Permission.VIEW_FAMILY,
-    Permission.VIEW_MEMBER,
-    Permission.UPLOAD_MEMORY,
-  ],
+export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
+  [Role.ADMIN]: Object.values(Permission),
   [Role.VIEWER]: [
     Permission.VIEW_FAMILY,
     Permission.VIEW_MEMBER,
+    Permission.VIEW_MEMORY,
+    Permission.UPLOAD_MEMORY,
+  ],
+  // Compatibility fallbacks for legacy references
+  ADMIN: Object.values(Permission),
+  VIEWER: [
+    Permission.VIEW_FAMILY,
+    Permission.VIEW_MEMBER,
+    Permission.VIEW_MEMORY,
+    Permission.UPLOAD_MEMORY,
+  ],
+  FAMILY_OWNER: Object.values(Permission),
+  FAMILY_ADMIN: Object.values(Permission),
+  BRANCH_MANAGER: Object.values(Permission),
+  PARENT_MANAGER: [
+    Permission.VIEW_FAMILY,
+    Permission.VIEW_MEMBER,
+    Permission.VIEW_MEMORY,
+    Permission.UPLOAD_MEMORY,
+  ],
+  MEMBER: [
+    Permission.VIEW_FAMILY,
+    Permission.VIEW_MEMBER,
+    Permission.VIEW_MEMORY,
+    Permission.UPLOAD_MEMORY,
+  ],
+  CONTRIBUTOR: [
+    Permission.VIEW_FAMILY,
+    Permission.VIEW_MEMBER,
+    Permission.VIEW_MEMORY,
+    Permission.UPLOAD_MEMORY,
   ],
 };
 
-export const hasPermission = (role: Role, permission: Permission): boolean => {
-  const permissions = DEFAULT_ROLE_PERMISSIONS[role] || [];
+export const hasPermission = (role: Role | string, permission: Permission): boolean => {
+  const normalized = normalizeRole(role as string);
+  const permissions = DEFAULT_ROLE_PERMISSIONS[normalized] || DEFAULT_ROLE_PERMISSIONS[role as string] || [];
   return permissions.includes(permission);
 };

@@ -21,6 +21,7 @@ import {
   AuditAction,
   hasPermission,
   DEFAULT_ROLE_PERMISSIONS,
+  normalizeRole,
 } from '../constants/index.ts';
 
 export class InvitationService {
@@ -92,13 +93,20 @@ export class InvitationService {
       }
     }
 
+    const effectiveRole = data.role ? normalizeRole(data.role) : Role.VIEWER;
+    if (effectiveRole === Role.ADMIN) {
+      throw new ValidationError(
+        'A family can have only one ADMIN. Additional users must be assigned the VIEWER role.'
+      );
+    }
+
     const { rawToken, tokenHash, expiresAt } = SecurityUtils.generateInvitationTokenBundle(7);
 
     const invitation = await invitationRepository.create({
       familyId: new Types.ObjectId(data.familyId),
       invitedEmail: email,
       invitedBy: new Types.ObjectId(data.invitedByUserId),
-      role: data.role || Role.MEMBER,
+      role: Role.VIEWER,
       targetMemberId: data.targetMemberId ? new Types.ObjectId(data.targetMemberId) : undefined,
       branchId: data.branchId ? new Types.ObjectId(data.branchId) : undefined,
       tokenHash,
@@ -112,7 +120,7 @@ export class InvitationService {
       AuditAction.INVITATION_CREATED,
       'FamilyInvitation',
       invitation._id.toString(),
-      { invitedEmail: email, role: data.role, branchId: data.branchId }
+      { invitedEmail: email, role: Role.VIEWER, branchId: data.branchId }
     );
 
     return {

@@ -188,4 +188,26 @@ describe('Phase 52: Remove Memory Button from Family Tree & Direct Add in Memori
     expect(html).toContain('Memory Title');
     expect(html).toContain('Add to Memories');
   });
+
+  it('6. UploadNodeMemoryModal enforces Date as mandatory with required attribute and red asterisk', () => {
+    const html = renderToString(
+      <MemoryRouter>
+        <UploadNodeMemoryModal
+          isOpen={true}
+          member={livingMember}
+          members={[livingMember]}
+          familyId="fam-1"
+          onClose={() => {}}
+        />
+      </MemoryRouter>
+    );
+
+    // Date is marked with required asterisk and attribute
+    expect(html).toContain('id="memory-event-date"');
+    expect(html).toContain('required=""');
+    expect(html).toContain('text-red-500');
+    expect(html).toContain('Date');
+    // Submit button is disabled when title or date is empty
+    expect(html).toContain('disabled=""');
+  });
 });

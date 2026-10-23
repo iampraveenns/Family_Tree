@@ -10,8 +10,9 @@ import { Memory } from '../models/Memory.ts';
 import { FamilyEvent } from '../models/FamilyEvent.ts';
 import { FamilyMembership } from '../models/FamilyMembership.ts';
 import { FamilyInvitation } from '../models/FamilyInvitation.ts';
+import { userRepository } from '../repositories/userRepository.ts';
 import { NotFoundError, ValidationError } from '../utils/errors.ts';
-import { AuditAction, ErrorCode } from '../constants/index.ts';
+import { AuditAction, ErrorCode, Role, DEFAULT_ROLE_PERMISSIONS } from '../constants/index.ts';
 import { ServiceContext } from './familyService.ts';
 
 export class MemberService {
@@ -29,7 +30,33 @@ export class MemberService {
       }
     }
 
-    // 3. Normalize display name
+    // 3. Registered Account Verification Rule (Rule 3)
+    // A family member node can ONLY be created if that person already has a registered user account,
+    // unless they are marked as deceased / historical ancestor.
+    const isDeceased = data.isLiving === false || Boolean(data.dateOfDeath && data.dateOfDeath.trim().length > 0);
+    const rawAccountEmail = (data as any).registeredEmail || (data as any).email || (data as any).userEmail || (data as any).accountEmail;
+    const accountEmail = typeof rawAccountEmail === 'string' ? rawAccountEmail.trim().toLowerCase() : undefined;
+    const accountUserId = (data as any).linkedUserId || (data as any).userId;
+
+    let linkedUser: any = null;
+    if (accountEmail) {
+      linkedUser = await userRepository.findByEmail(accountEmail);
+    } else if (accountUserId && Types.ObjectId.isValid(accountUserId)) {
+      linkedUser = await userRepository.findById(accountUserId);
+    }
+
+    if (!isDeceased) {
+      if (!linkedUser) {
+        throw new ValidationError('Cannot create member node: This person must have a registered account first.');
+      }
+      data.linkedUserId = linkedUser._id;
+    } else {
+      if (linkedUser) {
+        data.linkedUserId = linkedUser._id;
+      }
+    }
+
+    // 4. Normalize display name
     const firstName = data.firstName?.trim() || '';
     const lastName = data.lastName?.trim() || '';
     const displayName = data.displayName?.trim() || `${firstName} ${lastName}`.trim();
@@ -40,6 +67,28 @@ export class MemberService {
       displayName,
       createdBy: context?.userId || 'system',
     });
+
+    // 5. Ensure the linked registered user is recorded in family memberships as VIEWER if not present
+    if (data.linkedUserId) {
+      try {
+        const existingMembership = await membershipRepository.findByUserAndFamily(data.linkedUserId, familyId);
+        if (!existingMembership) {
+          await membershipRepository.create({
+            userId: new Types.ObjectId(data.linkedUserId),
+            familyId: new Types.ObjectId(familyId),
+            memberId: member._id,
+            role: Role.VIEWER,
+            status: 'ACTIVE',
+            permissions: DEFAULT_ROLE_PERMISSIONS[Role.VIEWER],
+          });
+        } else if (!existingMembership.memberId) {
+          existingMembership.memberId = member._id;
+          await existingMembership.save();
+        }
+      } catch (err) {
+        // Membership association log if needed
+      }
+    }
 
     await auditService.log(
       familyId,

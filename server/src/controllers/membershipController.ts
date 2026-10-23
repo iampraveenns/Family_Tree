@@ -25,23 +25,46 @@ export class MembershipController {
       const { role } = req.body;
       const actorUserId = req.user!.userId;
 
-      if (!role || !Object.values(Role).includes(role)) {
-        throw new ValidationError(`Invalid role: ${role}`);
+      if (!role) {
+        throw new ValidationError('Role is required');
       }
+
+      const targetRole = normalizeRole(role as Role);
 
       const check = await authorizationService.canModifyMembershipRole(
         actorUserId,
         familyId,
         membershipId,
-        role as Role
+        targetRole
       );
 
       if (!check.allowed) {
         throw new ForbiddenError(check.reason || 'You are not authorized to assign this role');
       }
 
-      const newPermissions = DEFAULT_ROLE_PERMISSIONS[role as Role] || [];
-      const updated = await membershipRepository.updateRole(membershipId, role as Role, newPermissions);
+      // Single Admin Constraint: If target is promoted to ADMIN, transfer ownership from existing ADMIN
+      if (targetRole === Role.ADMIN) {
+        const currentAdmin = await membershipRepository.findAdmin(familyId);
+        if (currentAdmin && currentAdmin._id.toString() !== membershipId) {
+          // Demote previous admin to VIEWER
+          await membershipRepository.updateRole(
+            currentAdmin._id.toString(),
+            Role.VIEWER,
+            DEFAULT_ROLE_PERMISSIONS[Role.VIEWER]
+          );
+          await auditService.log(
+            familyId,
+            actorUserId,
+            AuditAction.ROLE_CHANGED,
+            'FamilyMembership',
+            currentAdmin._id.toString(),
+            { newRole: Role.VIEWER, transferNote: 'Demoted previous admin during ownership transfer' }
+          );
+        }
+      }
+
+      const newPermissions = DEFAULT_ROLE_PERMISSIONS[targetRole] || [];
+      const updated = await membershipRepository.updateRole(membershipId, targetRole, newPermissions);
 
       if (!updated) {
         throw new NotFoundError('Membership not found');
@@ -53,7 +76,7 @@ export class MembershipController {
         AuditAction.ROLE_CHANGED,
         'FamilyMembership',
         membershipId,
-        { newRole: role, targetUserId: updated.userId.toString() }
+        { newRole: targetRole, targetUserId: updated.userId.toString() }
       );
 
       sendSuccess(res, updated, 'Role updated successfully');
@@ -72,10 +95,10 @@ export class MembershipController {
         throw new NotFoundError('Membership not found');
       }
 
-      if (targetMembership.role === Role.FAMILY_OWNER) {
-        const ownerCount = await membershipRepository.countOwners(familyId);
-        if (ownerCount <= 1) {
-          throw new ForbiddenError('Cannot remove the final Family Owner');
+      if (normalizeRole(targetMembership.role) === Role.ADMIN) {
+        const adminCount = await membershipRepository.countAdmins(familyId);
+        if (adminCount <= 1) {
+          throw new ForbiddenError('Cannot remove the sole Family Admin. Transfer ownership first.');
         }
       }
 
