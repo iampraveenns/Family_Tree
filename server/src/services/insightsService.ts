@@ -8,7 +8,7 @@ import { MemoryCollection } from '../models/MemoryCollection.ts';
 import { User } from '../models/User.ts';
 import { membershipRepository } from '../repositories/membershipRepository.ts';
 import { branchRepository } from '../repositories/branchRepository.ts';
-import { Role, RelationshipStatus, MemoryStatus, MemoryVisibility, EventVisibility, RelationshipType } from '../constants/index.ts';
+import { Role, normalizeRole, RelationshipStatus, MemoryStatus, MemoryVisibility, EventVisibility, RelationshipType } from '../constants/index.ts';
 import { ForbiddenError, NotFoundError } from '../utils/errors.ts';
 
 export interface LargestBranchInsight {
@@ -206,7 +206,7 @@ export class InsightsService {
     }
 
     const isOwnerOrAdmin =
-      membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN;
+      normalizeRole(membership.role) === Role.ADMIN;
 
     let allowedBranchIds: string[] = [];
     if (!isOwnerOrAdmin && membership.memberId) {

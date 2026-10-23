@@ -4,7 +4,7 @@ import { Memory, IMemory } from '../models/Memory.ts';
 import { FamilyEvent, IFamilyEvent } from '../models/FamilyEvent.ts';
 import { Branch, IBranch } from '../models/Branch.ts';
 import { Relationship, IRelationship } from '../models/Relationship.ts';
-import { MemoryVisibility, MemoryStatus, EventVisibility, Role } from '../constants/index.ts';
+import { MemoryVisibility, MemoryStatus, EventVisibility, Role, normalizeRole } from '../constants/index.ts';
 import { ServiceContext } from './familyService.ts';
 import { membershipRepository } from '../repositories/membershipRepository.ts';
 import { auditRepository } from '../repositories/auditRepository.ts';
@@ -155,7 +155,7 @@ export class SearchService {
     if (actorUserId && Types.ObjectId.isValid(actorUserId)) {
       const membership = await membershipRepository.findByUserAndFamily(actorUserId, familyId);
       if (membership) {
-        if (membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN) {
+        if (normalizeRole(membership.role) === Role.ADMIN) {
           isOwnerOrAdmin = true;
         }
         if (membership.branchId) {

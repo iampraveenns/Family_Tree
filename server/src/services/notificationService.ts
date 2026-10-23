@@ -2,7 +2,7 @@ import { Types } from 'mongoose';
 import { notificationRepository } from '../repositories/notificationRepository.ts';
 import { membershipRepository } from '../repositories/membershipRepository.ts';
 import { NotificationType } from '../models/FamilyNotification.ts';
-import { Role } from '../constants/index.ts';
+import { Role, normalizeRole } from '../constants/index.ts';
 
 export class NotificationService {
   async getNotifications(
@@ -80,7 +80,7 @@ export class NotificationService {
     const memberships = await membershipRepository.findByFamily(data.familyId);
     const adminMembers = memberships.filter(
       (m) =>
-        (m.role === Role.FAMILY_OWNER || m.role === Role.FAMILY_ADMIN) &&
+        normalizeRole(m.role) === Role.ADMIN &&
         m.status === 'ACTIVE'
     );
 

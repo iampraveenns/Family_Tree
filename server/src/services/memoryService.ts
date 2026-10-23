@@ -15,6 +15,7 @@ import {
   MemoryStatus,
   Permission,
   Role,
+  normalizeRole,
 } from '../constants/index.ts';
 import {
   NotFoundError,
@@ -219,7 +220,7 @@ export class MemoryService {
     }
 
     const isOwnerOrAdmin =
-      membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN;
+      normalizeRole(membership.role) === Role.ADMIN;
 
     let allowedBranchIds: string[] = [];
     if (!isOwnerOrAdmin && membership.memberId) {
@@ -490,7 +491,7 @@ export class MemoryService {
     const day = now.getDate(); // 1-31
 
     const isOwnerOrAdmin =
-      membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN;
+      normalizeRole(membership.role) === Role.ADMIN;
     const allowedBranchIds = membership.branchId ? [membership.branchId.toString()] : [];
 
     const memories = await memoryRepository.getOnThisDay(familyId, month, day, {

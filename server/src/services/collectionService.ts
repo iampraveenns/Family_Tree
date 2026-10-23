@@ -2,9 +2,8 @@ import { Types } from 'mongoose';
 import { collectionRepository } from '../repositories/collectionRepository.ts';
 import { memoryRepository } from '../repositories/memoryRepository.ts';
 import { membershipRepository } from '../repositories/membershipRepository.ts';
-import { authorizationService } from './authorizationService.ts';
 import { auditService } from './auditService.ts';
-import { AuditAction, Role, MemoryStatus, MemoryType } from '../constants/index.ts';
+import { AuditAction, Role, normalizeRole, MemoryStatus, MemoryType } from '../constants/index.ts';
 import { ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.ts';
 
 export class CollectionService {
@@ -14,7 +13,7 @@ export class CollectionService {
       throw new ForbiddenError('You must be an active family member to view collections');
     }
 
-    const isOwnerOrAdmin = membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN;
+    const isOwnerOrAdmin = normalizeRole(membership.role) === Role.ADMIN;
     const allowedBranchIds = membership.branchId ? [membership.branchId.toString()] : [];
 
     let collections = await collectionRepository.findByFamily(familyId, {
@@ -42,7 +41,7 @@ export class CollectionService {
       throw new ForbiddenError('You must be an active family member to view collections');
     }
 
-    const isOwnerOrAdmin = membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN;
+    const isOwnerOrAdmin = normalizeRole(membership.role) === Role.ADMIN;
     const allowedBranchIds = membership.branchId ? [membership.branchId.toString()] : [];
 
     const collection = await collectionRepository.findById(familyId, collectionId, {
@@ -117,7 +116,7 @@ export class CollectionService {
       throw new ForbiddenError('You must be an active family member to update collections');
     }
 
-    const isOwnerOrAdmin = membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN;
+    const isOwnerOrAdmin = normalizeRole(membership.role) === Role.ADMIN;
 
     const collection = await collectionRepository.findById(familyId, collectionId, {
       actorUserId,
@@ -148,7 +147,7 @@ export class CollectionService {
       throw new ForbiddenError('You must be an active family member to delete collections');
     }
 
-    const isOwnerOrAdmin = membership.role === Role.FAMILY_OWNER || membership.role === Role.FAMILY_ADMIN;
+    const isOwnerOrAdmin = normalizeRole(membership.role) === Role.ADMIN;
 
     const collection = await collectionRepository.findById(familyId, collectionId, {
       actorUserId,

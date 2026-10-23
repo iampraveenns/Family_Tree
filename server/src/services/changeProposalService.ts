@@ -12,6 +12,7 @@ import {
 } from '../models/ChangeProposal.ts';
 import {
   Role,
+  normalizeRole,
   Permission,
   AuditAction,
   hasPermission,
@@ -136,8 +137,7 @@ export class ChangeProposalService {
 
     const canApprove =
       hasPermission(membership.role, Permission.APPROVE_CHANGES) ||
-      membership.role === Role.FAMILY_OWNER ||
-      membership.role === Role.FAMILY_ADMIN;
+      normalizeRole(membership.role) === Role.ADMIN;
 
     if (!canApprove) {
       throw new ForbiddenError('You lack permission to approve family changes');
@@ -215,8 +215,7 @@ export class ChangeProposalService {
 
     const canApprove =
       hasPermission(membership.role, Permission.APPROVE_CHANGES) ||
-      membership.role === Role.FAMILY_OWNER ||
-      membership.role === Role.FAMILY_ADMIN;
+      normalizeRole(membership.role) === Role.ADMIN;
 
     if (!canApprove) {
       throw new ForbiddenError('You lack permission to review family changes');
