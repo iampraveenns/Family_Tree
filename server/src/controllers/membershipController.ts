@@ -5,7 +5,7 @@ import { authorizationService } from '../services/authorizationService.ts';
 import { invitationService } from '../services/invitationService.ts';
 import { auditService } from './../services/auditService.ts';
 import { ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.ts';
-import { Role, DEFAULT_ROLE_PERMISSIONS, AuditAction } from '../constants/index.ts';
+import { Role, DEFAULT_ROLE_PERMISSIONS, AuditAction, normalizeRole } from '../constants/index.ts';
 import { sendSuccess } from '../utils/apiResponse.ts';
 
 export class MembershipController {

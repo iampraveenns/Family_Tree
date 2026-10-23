@@ -141,7 +141,6 @@ export class AuthorizationService {
 
     return { allowed: false, reason: 'Role does not permit member creation' };
   }
-  }
 
   /**
    * Evaluates authorization for relationship creation between two members.

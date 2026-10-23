@@ -2,12 +2,12 @@ export enum Role {
   ADMIN = 'ADMIN',
   VIEWER = 'VIEWER',
   // Backward compatibility mappings
-  FAMILY_OWNER = 'ADMIN',
-  FAMILY_ADMIN = 'ADMIN',
-  BRANCH_MANAGER = 'ADMIN',
-  PARENT_MANAGER = 'VIEWER',
-  MEMBER = 'VIEWER',
-  CONTRIBUTOR = 'VIEWER',
+  FAMILY_OWNER = 'FAMILY_OWNER',
+  FAMILY_ADMIN = 'FAMILY_ADMIN',
+  BRANCH_MANAGER = 'BRANCH_MANAGER',
+  PARENT_MANAGER = 'PARENT_MANAGER',
+  MEMBER = 'MEMBER',
+  CONTRIBUTOR = 'CONTRIBUTOR',
 }
 
 export function normalizeRole(role?: string | null): Role {
@@ -27,14 +27,12 @@ export function normalizeRole(role?: string | null): Role {
 export const RoleRank: Record<string, number> = {
   [Role.ADMIN]: 100,
   [Role.VIEWER]: 10,
-  ADMIN: 100,
-  VIEWER: 10,
-  FAMILY_OWNER: 100,
-  FAMILY_ADMIN: 100,
-  BRANCH_MANAGER: 100,
-  PARENT_MANAGER: 10,
-  CONTRIBUTOR: 10,
-  MEMBER: 10,
+  [Role.FAMILY_OWNER]: 100,
+  [Role.FAMILY_ADMIN]: 100,
+  [Role.BRANCH_MANAGER]: 100,
+  [Role.PARENT_MANAGER]: 10,
+  [Role.CONTRIBUTOR]: 10,
+  [Role.MEMBER]: 10,
 };
 
 export enum AuthorizationScope {
@@ -137,6 +135,7 @@ export enum BranchVisibility {
 
 export enum MemoryType {
   PHOTO = 'PHOTO',
+  VIDEO = 'VIDEO',
   STORY = 'STORY',
   AUDIO = 'AUDIO',
   DOCUMENT = 'DOCUMENT',
@@ -264,29 +263,22 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.UPLOAD_MEMORY,
   ],
   // Compatibility fallbacks for legacy references
-  ADMIN: Object.values(Permission),
-  VIEWER: [
+  [Role.FAMILY_OWNER]: Object.values(Permission),
+  [Role.FAMILY_ADMIN]: Object.values(Permission),
+  [Role.BRANCH_MANAGER]: Object.values(Permission),
+  [Role.PARENT_MANAGER]: [
     Permission.VIEW_FAMILY,
     Permission.VIEW_MEMBER,
     Permission.VIEW_MEMORY,
     Permission.UPLOAD_MEMORY,
   ],
-  FAMILY_OWNER: Object.values(Permission),
-  FAMILY_ADMIN: Object.values(Permission),
-  BRANCH_MANAGER: Object.values(Permission),
-  PARENT_MANAGER: [
+  [Role.MEMBER]: [
     Permission.VIEW_FAMILY,
     Permission.VIEW_MEMBER,
     Permission.VIEW_MEMORY,
     Permission.UPLOAD_MEMORY,
   ],
-  MEMBER: [
-    Permission.VIEW_FAMILY,
-    Permission.VIEW_MEMBER,
-    Permission.VIEW_MEMORY,
-    Permission.UPLOAD_MEMORY,
-  ],
-  CONTRIBUTOR: [
+  [Role.CONTRIBUTOR]: [
     Permission.VIEW_FAMILY,
     Permission.VIEW_MEMBER,
     Permission.VIEW_MEMORY,

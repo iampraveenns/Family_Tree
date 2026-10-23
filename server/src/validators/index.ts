@@ -81,7 +81,7 @@ export const onboardingSetupSchema = z.object({
   firstMemory: z
     .object({
       title: z.string().min(1).max(200),
-      memoryType: z.enum(['PHOTO', 'STORY', 'AUDIO', 'DOCUMENT', 'RECIPE']).optional(),
+      memoryType: z.enum(['PHOTO', 'VIDEO', 'STORY', 'AUDIO', 'DOCUMENT', 'RECIPE']).optional(),
       description: z.string().max(5000).optional(),
       eventDate: z.string().optional(),
       location: z.string().max(200).optional(),

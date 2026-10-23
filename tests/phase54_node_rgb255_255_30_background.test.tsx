@@ -47,7 +47,7 @@ describe('Phase 54: Node Background Color rgb(255, 255, 30) for Existing and New
     dateOfBirth: '2005-11-12',
   };
 
-  it('1. verifies existing member node renders with rgb(255, 255, 30) background color and bg-[rgb(255,255,30)]', () => {
+  it('1. verifies existing member node renders with #fef08a background color and bg-[#fef08a]', () => {
     const data: HeritageMemberNodeData = {
       member: sampleLivingMember,
       isSelected: false,
@@ -60,11 +60,11 @@ describe('Phase 54: Node Background Color rgb(255, 255, 30) for Existing and New
     const html = renderToString(<HeritageMemberNode data={data} id="node-existing-1" {...({} as any)} />);
 
     // Direct inline style and Tailwind utility class verification
-    expect(html).toContain('background-color:rgb(255, 255, 30)');
-    expect(html).toContain('bg-[rgb(255,255,30)]');
+    expect(html).toContain('background-color:#fef08a');
+    expect(html).toContain('bg-[#fef08a]');
   });
 
-  it('2. verifies newly created member node renders with rgb(255, 255, 30) background color and bg-[rgb(255,255,30)]', () => {
+  it('2. verifies newly created member node renders with #fef08a background color and bg-[#fef08a]', () => {
     const data: HeritageMemberNodeData = {
       member: sampleNewlyCreatedMember,
       isSelected: false,
@@ -76,11 +76,11 @@ describe('Phase 54: Node Background Color rgb(255, 255, 30) for Existing and New
 
     const html = renderToString(<HeritageMemberNode data={data} id="node-newly-created-2" {...({} as any)} />);
 
-    expect(html).toContain('background-color:rgb(255, 255, 30)');
-    expect(html).toContain('bg-[rgb(255,255,30)]');
+    expect(html).toContain('background-color:#fef08a');
+    expect(html).toContain('bg-[#fef08a]');
   });
 
-  it('3. verifies popup action editbar on selected node uses rgb(255, 255, 30) background color', () => {
+  it('3. verifies popup action editbar on selected node uses #fef08a background color', () => {
     const data: HeritageMemberNodeData = {
       member: sampleLivingMember,
       isSelected: true,
@@ -93,11 +93,11 @@ describe('Phase 54: Node Background Color rgb(255, 255, 30) for Existing and New
     const html = renderToString(<HeritageMemberNode data={data} id="node-existing-1" {...({} as any)} />);
 
     expect(html).toContain('data-testid="node-popup-editbar-mem-node-existing-1"');
-    expect(html).toContain('background-color:rgb(255, 255, 30)');
-    expect(html).toContain('bg-[rgb(255,255,30)]');
+    expect(html).toContain('background-color:#fef08a');
+    expect(html).toContain('bg-[#fef08a]');
   });
 
-  it('4. verifies StarterMemberNode (add placeholder node) renders with rgb(255, 255, 30) background color', () => {
+  it('4. verifies StarterMemberNode (add placeholder node) renders with #fef08a background color', () => {
     const html = renderToString(
       <StarterMemberNode
         id="starter-node-1"
@@ -109,7 +109,7 @@ describe('Phase 54: Node Background Color rgb(255, 255, 30) for Existing and New
       />
     );
 
-    expect(html).toContain('background-color:rgb(255, 255, 30)');
-    expect(html).toContain('bg-[rgb(255,255,30)]');
+    expect(html).toContain('background-color:#fef08a');
+    expect(html).toContain('bg-[#fef08a]');
   });
 });

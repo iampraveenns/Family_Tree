@@ -1,4 +1,4 @@
-import { Memory, MediaAsset } from '../types/index.ts';
+import { Memory, MediaAsset, FamilyMember } from '../types/index.ts';
 
 /**
  * Resolves a streamable or viewable image URL from any media asset or media ID.
@@ -111,6 +111,67 @@ export function getMemoryCoverUrl(memory: Memory | any): string | null {
 }
 
 /**
+ * Resolves the video streaming/playback URL for a memory item.
+ * Checks media array, videoAsset, mediaUrl, coverMedia, and coverMediaUrl.
+ */
+export function getMemoryVideoUrl(memory: Memory | any): string | null {
+  if (!memory) return null;
+
+  // 1. Direct videoUrl or mediaUrl
+  if (memory.videoUrl && typeof memory.videoUrl === 'string') return memory.videoUrl;
+  if (memory.mediaUrl && typeof memory.mediaUrl === 'string') return memory.mediaUrl;
+
+  // 2. Search media array for video asset
+  if (Array.isArray(memory.media) && memory.media.length > 0) {
+    const videoAsset = memory.media.find((item: any) => {
+      if (!item) return false;
+      if (item.mimeType?.startsWith('video/')) return true;
+      const fn = (item.originalFileName || item.storageKey || item.url || '').toLowerCase();
+      return fn.endsWith('.mp4') || fn.endsWith('.webm') || fn.endsWith('.mov') || fn.endsWith('.mkv');
+    });
+    if (videoAsset) {
+      const url = resolveMediaStreamUrl(videoAsset);
+      if (url) return url;
+    }
+  }
+
+  // 3. From coverMedia if video
+  if (memory.coverMedia) {
+    const cm = memory.coverMedia;
+    const isVid =
+      cm.mimeType?.startsWith('video/') ||
+      (cm.storageKey && /\.(mp4|webm|mov|mkv)$/i.test(cm.storageKey)) ||
+      (cm.originalFileName && /\.(mp4|webm|mov|mkv)$/i.test(cm.originalFileName));
+    if (isVid) {
+      const url = resolveMediaStreamUrl(cm);
+      if (url) return url;
+    }
+  }
+
+  // 4. If memoryType is VIDEO, fallback to coverMedia / coverMediaUrl / first media
+  const type = (memory.memoryType || memory.type || '').toUpperCase();
+  if (type === 'VIDEO') {
+    if (memory.coverMediaUrl && !memory.coverMediaUrl.includes('unsplash.com')) {
+      return memory.coverMediaUrl;
+    }
+    if (memory.coverMedia) {
+      const url = resolveMediaStreamUrl(memory.coverMedia);
+      if (url) return url;
+    }
+    if (memory.coverMediaId) {
+      const url = resolveMediaStreamUrl(memory.coverMediaId, memory.coverMediaId);
+      if (url) return url;
+    }
+    if (Array.isArray(memory.media) && memory.media.length > 0) {
+      const url = resolveMediaStreamUrl(memory.media[0]);
+      if (url) return url;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Formats a family name to the canonical format (e.g. "Pattara Family", "Sikawath Family").
  */
 export function formatFamilyDisplayName(rawName?: string | null): string {
@@ -123,4 +184,104 @@ export function formatFamilyDisplayName(rawName?: string | null): string {
     return `${base.charAt(0).toUpperCase() + base.slice(1)} family`;
   }
   return `${clean.charAt(0).toUpperCase() + clean.slice(1)} family`;
+}
+
+/**
+ * Resolves the author member record, author display name, and latest profile photo
+ * for any memory post. Ensures author profile photos updated in the family tree
+ * (such as Arun Pattara's updated profile) are immediately visible on their memory cards.
+ */
+export function resolveMemoryAuthor(
+  mem: Memory,
+  members: FamilyMember[] = [],
+  membersById?: Map<string, FamilyMember>
+): {
+  authorMember: FamilyMember | null;
+  authorName: string;
+  authorPhoto: string | null;
+} {
+  // 1. Resolve author name
+  let authorName =
+    mem.addedByMemberName ||
+    (typeof (mem as any).addedByMemberId === 'object'
+      ? (mem as any).addedByMemberId?.displayName ||
+        `${(mem as any).addedByMemberId?.firstName || ''} ${(mem as any).addedByMemberId?.lastName || ''}`.trim()
+      : null) ||
+    'Family Member';
+
+  let authorMember: FamilyMember | null = null;
+
+  // 2. Resolve by addedByMemberId if present
+  const rawAddedById = mem.addedByMemberId as any;
+  if (rawAddedById) {
+    if (typeof rawAddedById === 'string' && rawAddedById.trim().length > 0) {
+      authorMember =
+        membersById?.get(rawAddedById) ||
+        members.find((m) => m.id === rawAddedById || (m as any)._id === rawAddedById) ||
+        null;
+    } else if (typeof rawAddedById === 'object') {
+      const objId = rawAddedById.id || rawAddedById._id?.toString?.();
+      if (objId) {
+        authorMember =
+          membersById?.get(objId) ||
+          members.find((m) => m.id === objId || (m as any)._id === objId) ||
+          null;
+      }
+      if (!authorMember) {
+        authorMember = rawAddedById as FamilyMember;
+      }
+    }
+  }
+
+  // 3. Fallback: match by authorName across members list
+  if (!authorMember && authorName && authorName !== 'Family Member' && members.length > 0) {
+    const cleanName = authorName.toLowerCase().trim();
+    authorMember =
+      members.find((m) => {
+        const dName = (m.displayName || '').toLowerCase().trim();
+        const fName = `${m.firstName} ${m.lastName || ''}`.toLowerCase().trim();
+        const firstOnly = (m.firstName || '').toLowerCase().trim();
+        return dName === cleanName || fName === cleanName || firstOnly === cleanName;
+      }) ||
+      members.find((m) => {
+        const dName = (m.displayName || '').toLowerCase().trim();
+        const fName = `${m.firstName} ${m.lastName || ''}`.toLowerCase().trim();
+        return (cleanName && dName.includes(cleanName)) || (cleanName && fName.includes(cleanName));
+      }) ||
+      null;
+  }
+
+  // 4. Fallback to tagged members if any
+  if (!authorMember && mem.memberIds && mem.memberIds.length > 0) {
+    for (const rawId of mem.memberIds) {
+      const idStr = typeof rawId === 'object' ? (rawId as any)._id?.toString() || (rawId as any).id : rawId?.toString();
+      if (idStr) {
+        const found = membersById?.get(idStr) || members.find((m) => m.id === idStr || (m as any)._id === idStr);
+        if (found) {
+          authorMember = found;
+          break;
+        }
+      }
+    }
+  }
+
+  // 5. Update authorName if authorMember was found
+  if (authorMember && (!mem.addedByMemberName || authorName === 'Family Member')) {
+    authorName = authorMember.displayName || `${authorMember.firstName} ${authorMember.lastName}`.trim();
+  }
+
+  // 6. Extract profile photo from authorMember or memory payload
+  const rawPhoto =
+    authorMember?.profilePhoto ||
+    (authorMember as any)?.avatarUrl ||
+    (authorMember as any)?.avatar ||
+    (authorMember as any)?.profileImageUrl ||
+    (authorMember as any)?.photoUrl ||
+    (typeof rawAddedById === 'object' ? (rawAddedById as any)?.profilePhoto || (rawAddedById as any)?.avatar : null) ||
+    (mem as any).authorPhoto ||
+    (mem as any).addedByMemberPhoto;
+
+  const authorPhoto = typeof rawPhoto === 'string' && rawPhoto.trim().length > 0 ? rawPhoto.trim() : null;
+
+  return { authorMember, authorName, authorPhoto };
 }

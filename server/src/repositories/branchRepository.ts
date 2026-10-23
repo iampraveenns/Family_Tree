@@ -8,8 +8,22 @@ export class BranchRepository {
   }
 
   async findByFamilyAndId(familyId: string | Types.ObjectId, branchId: string | Types.ObjectId): Promise<IBranch | null> {
-    if (!Types.ObjectId.isValid(familyId) || !Types.ObjectId.isValid(branchId)) return null;
-    return Branch.findOne({ _id: branchId, familyId }).exec();
+    if (!Types.ObjectId.isValid(familyId)) return null;
+    if (Types.ObjectId.isValid(branchId)) {
+      return Branch.findOne({ _id: branchId, familyId }).exec();
+    }
+    // If branchId is a slug or name string (e.g. 'branch-arun-branch' or 'Arun Branch')
+    if (typeof branchId === 'string' && branchId.trim()) {
+      const cleanName = branchId.replace(/^branch-/, '').replace(/[-_]/g, ' ').trim();
+      return Branch.findOne({
+        familyId,
+        $or: [
+          { name: { $regex: new RegExp(`^${cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+          { name: { $regex: new RegExp(`^${branchId.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+        ],
+      }).exec();
+    }
+    return null;
   }
 
   async findByFamilyId(familyId: string | Types.ObjectId): Promise<IBranch[]> {

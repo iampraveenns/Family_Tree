@@ -24,7 +24,8 @@ import {
 } from 'lucide-react';
 import { Memory, FamilyMember, MemoryType } from '../../types/index.ts';
 import { MemberAvatar } from '../ui/MemberAvatar.tsx';
-import { resolveMediaStreamUrl, getMemoryCoverUrl, formatFamilyDisplayName } from '../../utils/mediaUtils.ts';
+import { resolveMediaStreamUrl, getMemoryCoverUrl, getMemoryVideoUrl, formatFamilyDisplayName, resolveMemoryAuthor } from '../../utils/mediaUtils.ts';
+import { VideoMemoryCardPlayer } from './MemoriesSidePanel.tsx';
 import { formatSingleDate } from './HeritageMemberNode.tsx';
 
 export interface FamilyMemoriesSidebarProps {
@@ -403,13 +404,9 @@ export const FamilyMemoriesSidebar: React.FC<FamilyMemoriesSidebarProps> = ({
               // Media Assets checks
               const videoAsset = memory.media?.find((a) => a.mimeType?.startsWith('video/'));
               const audioAsset = memory.media?.find((a) => a.mimeType?.startsWith('audio/'));
-              const videoUrl = videoAsset ? resolveMediaStreamUrl(videoAsset) : null;
+              const videoUrl = getMemoryVideoUrl(memory) || (videoAsset ? resolveMediaStreamUrl(videoAsset) : null);
               const audioUrl = audioAsset ? resolveMediaStreamUrl(audioAsset) : null;
-              const authorMember = (memory.addedByMemberId ? memberMap.get(memory.addedByMemberId) : null) ||
-                (rawMemberIds.length > 0 ? memberMap.get(rawMemberIds[0]?.toString()) : null);
-              const authorName = memory.addedByMemberName ||
-                (authorMember ? (authorMember.displayName || `${authorMember.firstName} ${authorMember.lastName}`.trim()) : null) ||
-                'Family Member';
+              const { authorMember, authorName, authorPhoto } = resolveMemoryAuthor(memory, members, memberMap);
 
               return (
                 <div
@@ -425,6 +422,8 @@ export const FamilyMemoriesSidebar: React.FC<FamilyMemoriesSidebarProps> = ({
                     <div className="flex items-center gap-2 min-w-0">
                       <MemberAvatar
                         member={authorMember || ({ firstName: authorName.split(' ')[0] || 'F', lastName: authorName.split(' ')[1] || 'M' } as any)}
+                        src={authorPhoto || authorMember?.profilePhoto}
+                        gender={authorMember?.gender}
                         size="sm"
                         className="w-7 h-7 ring-1.5 ring-blue-500/20 shrink-0"
                       />
@@ -451,34 +450,10 @@ export const FamilyMemoriesSidebar: React.FC<FamilyMemoriesSidebarProps> = ({
 
                   {/* Media Preview Slot */}
                   {mType === 'VIDEO' || videoUrl ? (
-                    <div className="relative w-full aspect-video bg-black/90 flex items-center justify-center overflow-hidden">
-                      {videoUrl ? (
-                        <video
-                          src={videoUrl}
-                          controls
-                          preload="metadata"
-                          className="w-full h-full object-contain"
-                        />
-                      ) : coverUrl ? (
-                        <div className="relative w-full h-full cursor-pointer" onClick={() => onViewMediaDetail?.(memory)}>
-                          <img
-                            src={coverUrl}
-                            alt={memory.title}
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                            <div className="w-11 h-11 rounded-full bg-white/90 text-[#2563EB] flex items-center justify-center shadow-lg group-hover/card:scale-110 transition-transform">
-                              <Play className="w-5 h-5 ml-0.5 fill-[#2563EB]" />
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center text-white/80 p-6 text-center">
-                          <Video className="w-8 h-8 mb-1.5 text-blue-400" />
-                          <span className="text-xs font-semibold">Video Recording</span>
-                        </div>
-                      )}
-                    </div>
+                    <VideoMemoryCardPlayer
+                      memory={memory}
+                      onOpenFullView={() => onViewMediaDetail?.(memory)}
+                    />
                   ) : mType === 'AUDIO' || audioUrl ? (
                     <div className="p-3.5 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border-b border-[#CBD5E1]">
                       <div className="flex items-center gap-2 mb-2">

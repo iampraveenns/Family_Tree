@@ -203,7 +203,7 @@ export const TreeFloatingControls: React.FC<TreeFloatingControlsProps> = ({
                 if (node.type === 'generationMarker' || node.type === 'coupleJunction') {
                   return 'transparent';
                 }
-                return 'rgb(255, 255, 30)';
+                return '#fef08a';
               }}
               nodeStrokeColor="#B8D4FF"
               nodeStrokeWidth={1.5}

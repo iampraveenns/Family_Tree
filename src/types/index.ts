@@ -93,6 +93,7 @@ export interface FamilyBranch {
 
 export type MemoryType =
   | 'PHOTO'
+  | 'VIDEO'
   | 'STORY'
   | 'AUDIO'
   | 'DOCUMENT'
@@ -150,6 +151,8 @@ export interface Memory {
   type?: MemoryType;
   date?: string;
   relatedMemberIds?: string[];
+  mediaUrl?: string;
+  videoUrl?: string;
 }
 
 export interface MemoryCollection {

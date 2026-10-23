@@ -409,10 +409,10 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
       style={{
         width: 280,
         height: 160,
-        backgroundColor: 'rgb(255, 255, 30)',
+        backgroundColor: '#fef08a',
       }}
       aria-label={`Family member ${fullName}, Generation ${member.generation}`}
-      className={`group relative w-[280px] h-[160px] box-border rounded-2xl border-[1.5px] p-2.5 transition-all duration-200 ease-out cursor-default select-none outline-none flex flex-col justify-between bg-[rgb(255,255,30)] ${
+      className={`group relative w-[280px] h-[160px] box-border rounded-2xl border-[1.5px] p-2.5 transition-all duration-200 ease-out cursor-default select-none outline-none flex flex-col justify-between bg-[#fef08a] ${
         isPhotoMenuOpen ? 'overflow-visible z-50' : 'overflow-hidden'
       } ${
         isPathHighlighted
@@ -460,13 +460,13 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
         className="!w-2 !h-2 !bg-[#7EA7D9] !border-[1.5px] !border-white !-bottom-1"
       />
 
-      {/* Floating Action Pill Menu for Selected Member (Popup editbar with rgb(255, 255, 30) bg and correct text color) */}
+      {/* Floating Action Pill Menu for Selected Member (Popup editbar with #fef08a bg and correct text color) */}
       {isSelected && (
         <div
           onClick={(e) => e.stopPropagation()}
           data-testid={`node-popup-editbar-${member.id}`}
-          style={{ backgroundColor: 'rgb(255, 255, 30)' }}
-          className="absolute -top-11 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 px-1.5 py-1 rounded-xl bg-[rgb(255,255,30)] shadow-lg border border-[#B8D4FF] text-[11px] whitespace-nowrap text-[#17233C]"
+          style={{ backgroundColor: '#fef08a' }}
+          className="absolute -top-11 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 px-1.5 py-1 rounded-xl bg-[#fef08a] shadow-lg border border-[#B8D4FF] text-[11px] whitespace-nowrap text-[#17233C]"
         >
           <button
             type="button"

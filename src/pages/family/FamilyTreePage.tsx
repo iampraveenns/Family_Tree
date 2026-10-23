@@ -26,6 +26,7 @@ import {
   UserPlus,
   ImageIcon,
   Camera,
+  Upload,
   Pencil,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -250,7 +251,16 @@ const FamilyTreeInner: React.FC = () => {
           location: data.location || undefined,
           profilePhoto: data.photoUrl || undefined,
           biography: data.biography || undefined,
-          branchIds: data.branchId ? [data.branchId] : [],
+          branchIds: (() => {
+            if (!data.branchId) return [];
+            const matchingBranch = branches.find(
+              (b) => b.id === data.branchId || b.name.toLowerCase() === data.branchId?.toLowerCase()
+            );
+            if (matchingBranch && /^[0-9a-fA-F]{24}$/.test(matchingBranch.id)) {
+              return [matchingBranch.id];
+            }
+            return [data.branchId];
+          })(),
         };
 
         let res = await authenticatedFetch(`/api/families/${famId}/members/${targetMemberId}`, {
@@ -1817,13 +1827,36 @@ const FamilyTreeInner: React.FC = () => {
                     style={{ backgroundColor: 'rgb(255, 255, 30)' }}
                     className="mt-3 w-full p-3 rounded-xl border-[1.5px] border-[#B8D4FF] bg-[rgb(255,255,30)] text-left text-xs space-y-2 text-[#17233C]"
                   >
-                    <label className="font-semibold text-[#17233C] block">
-                      Direct Photo URL
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="font-semibold text-[#17233C] block">
+                        Direct Photo URL or Upload File
+                      </label>
+                      <label className="text-[11px] font-semibold text-[#2563EB] hover:underline cursor-pointer flex items-center gap-1">
+                        <Upload className="w-3 h-3" />
+                        <span>Choose File</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                if (typeof reader.result === 'string') {
+                                  setPhotoUrlInput(reader.result);
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
                     <input
-                      type="url"
-                      placeholder="https://images.unsplash.com/..."
-                      value={photoUrlInput}
+                      type="text"
+                      placeholder="https://... or choose a file above"
+                      value={photoUrlInput.startsWith('data:image') ? '[Selected local image file]' : photoUrlInput}
                       onChange={(e) => setPhotoUrlInput(e.target.value)}
                       className="w-full rounded-lg border-[1.5px] border-[#94A3B8] bg-white px-2.5 py-1.5 text-xs text-[#0F172A] focus:ring-1 focus:ring-[#2563EB] outline-none"
                     />

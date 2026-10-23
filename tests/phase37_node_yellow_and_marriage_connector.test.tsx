@@ -82,8 +82,8 @@ describe('Phase: Node UI - Minimal Marriage Connector & Butter #FEF3C7 Backgroun
 
     const html = renderToString(<HeritageMemberNode data={nodeData} />);
 
-    // Background color (updated to rgb(255, 255, 30) per Phase 54) and enlarged dimensions
-    expect(html).toMatch(/background-color:\s*(rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
+    // Background color (#fef08a) and enlarged dimensions
+    expect(html).toMatch(/background-color:\s*(#fef08a|rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
     expect(html).toContain('width:280px');
     expect(html).toContain('height:160px');
   });
@@ -100,7 +100,7 @@ describe('Phase: Node UI - Minimal Marriage Connector & Butter #FEF3C7 Backgroun
 
     const html = renderToString(<HeritageMemberNode data={nodeData} />);
 
-    expect(html).toMatch(/background-color:\s*(rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
+    expect(html).toMatch(/background-color:\s*(#fef08a|rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
     expect(html).toContain('width:280px');
     expect(html).toContain('height:160px');
   });
@@ -117,7 +117,7 @@ describe('Phase: Node UI - Minimal Marriage Connector & Butter #FEF3C7 Backgroun
 
     const html = renderToString(<HeritageMemberNode data={nodeData} />);
 
-    expect(html).toMatch(/background-color:\s*(rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
+    expect(html).toMatch(/background-color:\s*(#fef08a|rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
     expect(html).toContain('border-[#2563EB]');
   });
 });

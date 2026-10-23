@@ -5,6 +5,7 @@ import { relationshipRepository } from '../repositories/relationshipRepository.t
 import { branchRepository } from '../repositories/branchRepository.ts';
 import { familyService } from './familyService.ts';
 import { auditService } from './auditService.ts';
+import { Branch } from '../models/Branch.ts';
 import { FamilyMember, IFamilyMember } from '../models/FamilyMember.ts';
 import { Memory } from '../models/Memory.ts';
 import { FamilyEvent } from '../models/FamilyEvent.ts';
@@ -12,22 +13,108 @@ import { FamilyMembership } from '../models/FamilyMembership.ts';
 import { FamilyInvitation } from '../models/FamilyInvitation.ts';
 import { userRepository } from '../repositories/userRepository.ts';
 import { NotFoundError, ValidationError } from '../utils/errors.ts';
-import { AuditAction, ErrorCode, Role, DEFAULT_ROLE_PERMISSIONS } from '../constants/index.ts';
+import { AuditAction, ErrorCode, Role, DEFAULT_ROLE_PERMISSIONS, BranchVisibility } from '../constants/index.ts';
 import { ServiceContext } from './familyService.ts';
 
 export class MemberService {
+  private async resolveAndValidateBranchIds(
+    familyId: string,
+    branchIds: (string | Types.ObjectId)[],
+    fallbackRootMemberId?: Types.ObjectId | string,
+    context?: ServiceContext
+  ): Promise<Types.ObjectId[]> {
+    const resolvedOids: Types.ObjectId[] = [];
+    const seen = new Set<string>();
+
+    for (const bId of branchIds) {
+      if (!bId) continue;
+      const bIdStr = bId.toString().trim();
+      if (!bIdStr) continue;
+
+      // 1. If it's a valid 24-character ObjectId
+      if (Types.ObjectId.isValid(bIdStr)) {
+        const branch = await branchRepository.findByFamilyAndId(familyId, bIdStr);
+        if (!branch) {
+          throw new ValidationError(`Branch '${bIdStr}' does not belong to family '${familyId}'`);
+        }
+        const oidStr = branch._id.toString();
+        if (!seen.has(oidStr)) {
+          seen.add(oidStr);
+          resolvedOids.push(branch._id);
+        }
+        continue;
+      }
+
+      // 2. If it's a slug or branch name (e.g. 'branch-arun-branch' or 'Arun Branch')
+      const cleanName = bIdStr.replace(/^branch-/, '').replace(/[-_]/g, ' ').trim();
+      let branch = await branchRepository.findByName(familyId, cleanName);
+      if (!branch) {
+        branch = await Branch.findOne({
+          familyId: new Types.ObjectId(familyId),
+          $or: [
+            { name: { $regex: new RegExp(`^${cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+            { name: { $regex: new RegExp(`^${bIdStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+          ],
+        }).exec();
+      }
+
+      if (branch) {
+        const oidStr = branch._id.toString();
+        if (!seen.has(oidStr)) {
+          seen.add(oidStr);
+          resolvedOids.push(branch._id);
+        }
+        continue;
+      }
+
+      // 3. Dynamic lineage branch slug (e.g. 'branch-arun-branch')
+      // Auto-create or resolve the branch so it becomes a persisted first-class branch for the family
+      if (bIdStr.startsWith('branch-') || bIdStr.toLowerCase().includes('branch') || cleanName.length > 0) {
+        const formattedName = cleanName
+          .split(' ')
+          .filter(Boolean)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(' ');
+
+        let rootMemId = fallbackRootMemberId;
+        if (!rootMemId || !Types.ObjectId.isValid(rootMemId.toString())) {
+          const firstMem = await FamilyMember.findOne({ familyId: new Types.ObjectId(familyId) }).exec();
+          if (firstMem) rootMemId = firstMem._id;
+        }
+
+        if (rootMemId && Types.ObjectId.isValid(rootMemId.toString())) {
+          const newBranch = await branchRepository.create({
+            familyId: new Types.ObjectId(familyId),
+            name: formattedName || 'Family Branch',
+            description: `${formattedName || 'Lineage'} Branch of family`,
+            rootMemberId: new Types.ObjectId(rootMemId.toString()),
+            createdBy: context?.userId || 'system',
+            visibility: BranchVisibility.FAMILY,
+          });
+          const oidStr = newBranch._id.toString();
+          if (!seen.has(oidStr)) {
+            seen.add(oidStr);
+            resolvedOids.push(newBranch._id);
+          }
+          continue;
+        }
+        // If no root member available, skip pseudo-id gracefully without crashing
+        continue;
+      }
+
+      throw new ValidationError(`Branch '${bIdStr}' does not belong to family '${familyId}'`);
+    }
+
+    return resolvedOids;
+  }
+
   async createMember(familyId: string, data: Partial<IFamilyMember>, context?: ServiceContext): Promise<IFamilyMember> {
     // 1. Validate family exists
     await familyService.getFamilyById(familyId, context);
 
-    // 2. Validate branch references if provided
+    // 2. Validate and resolve branch references if provided
     if (data.branchIds && data.branchIds.length > 0) {
-      for (const bId of data.branchIds) {
-        const branch = await branchRepository.findByFamilyAndId(familyId, bId);
-        if (!branch) {
-          throw new ValidationError(`Branch '${bId}' does not belong to family '${familyId}'`);
-        }
-      }
+      data.branchIds = (await this.resolveAndValidateBranchIds(familyId, data.branchIds, undefined, context)) as any;
     }
 
     // 3. Registered Account Verification Rule (Rule 3)
@@ -199,14 +286,14 @@ export class MemberService {
 
     const effectiveFamilyId = existing.familyId ? existing.familyId.toString() : resolvedFamilyId;
 
-    // Validate branch updates if provided
+    // Validate and resolve branch updates if provided
     if (data.branchIds && data.branchIds.length > 0) {
-      for (const bId of data.branchIds) {
-        const branch = await branchRepository.findByFamilyAndId(effectiveFamilyId, bId);
-        if (!branch) {
-          throw new ValidationError(`Branch '${bId}' does not belong to family '${effectiveFamilyId}'`);
-        }
-      }
+      data.branchIds = (await this.resolveAndValidateBranchIds(
+        effectiveFamilyId,
+        data.branchIds,
+        existing._id,
+        context
+      )) as any;
     }
 
     // Recompute displayName if first or last name changed and displayName wasn't explicitly provided

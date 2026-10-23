@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { Memory, FamilyMember } from '../../types/index.ts';
 import { MemberAvatar } from '../ui/MemberAvatar.tsx';
-import { resolveMediaStreamUrl, getMemoryCoverUrl } from '../../utils/mediaUtils.ts';
+import { resolveMediaStreamUrl, getMemoryCoverUrl, getMemoryVideoUrl, resolveMemoryAuthor } from '../../utils/mediaUtils.ts';
 import { formatSingleDate } from './HeritageMemberNode.tsx';
 
 export interface MediaDetailLightboxModalProps {
@@ -41,7 +41,7 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
 
   const videoAsset = memory.media?.find((a) => a.mimeType?.startsWith('video/'));
   const audioAsset = memory.media?.find((a) => a.mimeType?.startsWith('audio/'));
-  const videoUrl = videoAsset ? resolveMediaStreamUrl(videoAsset) : null;
+  const videoUrl = getMemoryVideoUrl(memory) || (videoAsset ? resolveMediaStreamUrl(videoAsset) : null);
   const audioUrl = audioAsset ? resolveMediaStreamUrl(audioAsset) : null;
 
   // Resolve tagged members
@@ -55,11 +55,7 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
     .map((id: any) => memberMap.get(id?.toString()))
     .filter(Boolean) as FamilyMember[];
 
-  const authorMember = (memory.addedByMemberId ? memberMap.get(memory.addedByMemberId) : null) ||
-    (rawMemberIds.length > 0 ? memberMap.get(rawMemberIds[0]?.toString()) : null);
-  const authorName = memory.addedByMemberName ||
-    (authorMember ? (authorMember.displayName || `${authorMember.firstName} ${authorMember.lastName}`.trim()) : null) ||
-    'Family Member';
+  const { authorMember, authorName, authorPhoto } = resolveMemoryAuthor(memory, members, memberMap);
 
   return (
     <div
@@ -75,15 +71,14 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
       >
         {/* Top Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50/80">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-[#EFF6FF] text-[#2563EB]">
-              {mType === 'PHOTO' && <ImageIcon className="w-4 h-4" />}
-              {mType === 'VIDEO' && <Video className="w-4 h-4" />}
-              {mType === 'AUDIO' && <Headphones className="w-4 h-4" />}
-              {mType === 'STORY' && <BookOpen className="w-4 h-4" />}
-              {mType === 'DOCUMENT' && <FileText className="w-4 h-4" />}
-              {mType === 'RECIPE' && <Sparkles className="w-4 h-4" />}
-            </span>
+          <div className="flex items-center gap-2.5">
+            <MemberAvatar
+              member={authorMember || ({ firstName: authorName.split(' ')[0] || 'F', lastName: authorName.split(' ')[1] || 'M' } as any)}
+              src={authorPhoto || authorMember?.profilePhoto}
+              gender={authorMember?.gender}
+              size="sm"
+              className="w-8 h-8 ring-1.5 ring-blue-500/20 shrink-0"
+            />
             <div>
               <h3 className="text-base font-bold text-[#0F172A] leading-tight truncate">
                 {memory.title}

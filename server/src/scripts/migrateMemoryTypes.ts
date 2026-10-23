@@ -27,7 +27,7 @@ export function remapLegacyMemoryType(oldType: string): { newType: MemoryType; l
       return { newType: MemoryType.PHOTO, legacyTag: 'heirloom' };
 
     case 'VIDEO':
-      return { newType: MemoryType.PHOTO, legacyTag: 'video' };
+      return { newType: MemoryType.VIDEO, legacyTag: 'video' };
 
     case 'FAMILY_NARRATIVE':
       return { newType: MemoryType.STORY, legacyTag: 'family-narrative' };

@@ -109,12 +109,16 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
   if (!isOpen) return null;
 
   const processSelectedFile = async (file: File) => {
-    const isImage = file.type.startsWith('image/');
-    const isVideo = file.type.startsWith('video/');
-    const isAudio = file.type.startsWith('audio/');
+    const fileName = (file.name || '').toLowerCase();
+    const isImage = file.type.startsWith('image/') ||
+      ['.jpg', '.jpeg', '.png', '.webp', '.gif'].some((ext) => fileName.endsWith(ext));
+    const isVideo = file.type.startsWith('video/') ||
+      ['.mp4', '.webm', '.mov', '.mkv', '.ogg'].some((ext) => fileName.endsWith(ext));
+    const isAudio = file.type.startsWith('audio/') ||
+      ['.mp3', '.wav', '.ogg', '.m4a', '.aac'].some((ext) => fileName.endsWith(ext));
 
     if (!isImage && !isVideo && !isAudio) {
-      setFormError('Please select a photo, video, or audio file (JPEG, PNG, WebP, MP4, MOV, MP3, WAV, etc.).');
+      setFormError('Please select a photo, video, or audio file (JPEG, PNG, WebP, MP4, WebM, MOV, MP3, WAV, etc.).');
       return;
     }
 
@@ -213,13 +217,25 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
       if (fileType === 'audio') {
         memoryType = 'AUDIO';
       } else if (fileType === 'video') {
-        memoryType = 'PHOTO'; // Supported type in backend enum
+        memoryType = 'VIDEO';
       } else if (!mediaFile && description.trim()) {
         memoryType = 'STORY';
       }
 
       // Determine author
-      const selectedAuthor = members.find((m) => m.id === authorMemberId) || member;
+      let selectedAuthor = members.find((m) => m.id === authorMemberId);
+      if (!selectedAuthor && customAuthorName.trim()) {
+        const queryName = customAuthorName.trim().toLowerCase();
+        selectedAuthor = members.find(
+          (m) =>
+            m.displayName?.toLowerCase().trim() === queryName ||
+            `${m.firstName} ${m.lastName}`.toLowerCase().trim() === queryName ||
+            m.firstName.toLowerCase().trim() === queryName
+        );
+      }
+      if (!selectedAuthor) {
+        selectedAuthor = member;
+      }
       const authorFullName =
         customAuthorName.trim() ||
         (selectedAuthor
@@ -291,7 +307,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
           </div>
           <div>
             <h3 className="text-base font-bold text-[#17233C] leading-snug">
-              Add Memory
+              Add Memories
             </h3>
             <p className="text-[11px] text-[#475569] font-normal">
               {member
@@ -361,7 +377,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
         {/* 2. File Drag & Drop / Upload Area */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-[#17233C] flex items-center justify-between">
-            <span>Upload Photo, Video, or Audio (Optional for story posts)</span>
+            <span>Select Photo, Video, or Audio (Optional for story posts)</span>
             {mediaFile && (
               <span className="text-[10px] text-[#64748B] font-normal">
                 {(mediaFile.size / (1024 * 1024)).toFixed(2)} MB
@@ -468,7 +484,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                   <Upload className="w-4 h-4" />
                 </div>
                 <p className="text-xs text-[#17233C] font-medium">
-                  Drag and drop photos, videos, or audios, or{' '}
+                  Drag and drop photos, videos, or audios here, or{' '}
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -478,11 +494,12 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
                   </button>
                 </p>
                 <p className="text-[10px] text-[#64748B] mt-0.5">
-                  Supports JPEG, PNG, WebP, GIF, MP4, WebM, MOV, MP3, WAV up to 50MB
+                  Supports photos, videos, and audios (JPEG, PNG, WebP, GIF, MP4, WebM, MOV, MP3, WAV up to 50MB)
                 </p>
               </div>
             )}
 
+            {/* Media input supporting accept=image/*,video/mp4,video/webm,video/quicktime,audio/* */}
             <input
               ref={fileInputRef}
               type="file"
@@ -548,7 +565,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
           <div className="space-y-1">
             <label htmlFor="memory-event-date" className="text-xs font-semibold text-[#17233C] flex items-center gap-1">
               <Calendar className="w-3 h-3 text-[#64748B]" />
-              <span>Date <span className="text-red-500">*</span></span>
+              <span>Date</span> <span className="text-red-500">*</span>
             </label>
             <input
               id="memory-event-date"

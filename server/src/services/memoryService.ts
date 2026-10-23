@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { FamilyMember } from '../models/FamilyMember.ts';
 import { memoryRepository, MemoryFilterOptions } from '../repositories/memoryRepository.ts';
 import { mediaRepository } from '../repositories/mediaRepository.ts';
 import { memberRepository } from '../repositories/memberRepository.ts';
@@ -117,6 +118,35 @@ export class MemoryService {
         authorMemberId = new Types.ObjectId(input.addedByMemberId);
         if (!authorMemberName) {
           authorMemberName = authorMember.displayName || `${authorMember.firstName} ${authorMember.lastName}`.trim();
+        }
+      }
+    }
+
+    // If authorMemberId not yet resolved but author name is provided, match member by name in this family
+    if (!authorMemberId && authorMemberName) {
+      const cleanName = authorMemberName.trim();
+      const matched = await FamilyMember.findOne({
+        familyId: new Types.ObjectId(familyId),
+        $or: [
+          { displayName: { $regex: new RegExp(`^${cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+          { firstName: { $regex: new RegExp(`^${cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+          {
+            $expr: {
+              $regexMatch: {
+                input: { $concat: ['$firstName', ' ', '$lastName'] },
+                regex: `^${cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+                options: 'i',
+              },
+            },
+          },
+        ],
+      }).exec();
+
+      if (matched) {
+        authorMemberId = matched._id;
+        authorMemberName = matched.displayName || `${matched.firstName} ${matched.lastName}`.trim();
+        if (!memberOids.some((oid) => oid.toString() === matched._id.toString())) {
+          memberOids.push(matched._id);
         }
       }
     }

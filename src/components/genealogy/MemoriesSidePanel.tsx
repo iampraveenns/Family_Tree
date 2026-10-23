@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { Memory, FamilyMember, MediaAsset } from '../../types/index.ts';
 import { MemberAvatar } from '../ui/MemberAvatar.tsx';
-import { resolveMediaStreamUrl, getMemoryCoverUrl } from '../../utils/mediaUtils.ts';
+import { resolveMediaStreamUrl, getMemoryCoverUrl, getMemoryVideoUrl, resolveMemoryAuthor } from '../../utils/mediaUtils.ts';
 
 export interface MemoriesSidePanelProps {
   isOpen: boolean;
@@ -38,6 +38,119 @@ export interface MemoriesSidePanelProps {
 }
 
 type MediaFilterCategory = 'ALL' | 'PHOTO' | 'VIDEO' | 'AUDIO' | 'STORY_DOC';
+
+export interface VideoMemoryCardPlayerProps {
+  memory: Memory;
+  onOpenFullView: () => void;
+}
+
+export const VideoMemoryCardPlayer: React.FC<VideoMemoryCardPlayerProps> = ({
+  memory,
+  onOpenFullView,
+}) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  const videoUrl = useMemo(() => {
+    return getMemoryVideoUrl(memory) || getMemoryCoverUrl(memory) || '';
+  }, [memory]);
+
+  const handleMouseEnter = () => {
+    if (videoRef.current && videoUrl && !hasError) {
+      videoRef.current.muted = true;
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => setIsPlaying(true))
+          .catch((err) => {
+            console.debug('Autoplay hover play caught:', err);
+          });
+      }
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  return (
+    <div
+      data-testid={`video-card-player-${memory.id}`}
+      className="relative aspect-video rounded-xl overflow-hidden bg-black/95 group/video flex items-center justify-center border border-slate-700 shadow-inner"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {videoUrl && !hasError ? (
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          muted
+          playsInline
+          preload="metadata"
+          loop
+          className="w-full h-full object-contain cursor-pointer"
+          onError={() => setHasError(true)}
+          onClick={onOpenFullView}
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-4">
+          <Video className="w-10 h-10 text-indigo-400 mb-1 opacity-70" />
+          <span className="text-[11px] text-slate-300">Family Video Keepsake</span>
+        </div>
+      )}
+
+      {/* Floating "Open Full View" button mirroring photo lightbox */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenFullView();
+        }}
+        className="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-lg bg-black/75 hover:bg-[#2563EB] text-white text-[11px] font-semibold flex items-center gap-1.5 shadow-md backdrop-blur-xs transition-all cursor-pointer opacity-90 hover:opacity-100 z-10"
+        title="Open Full View"
+        aria-label="Open Full View"
+      >
+        <Maximize2 className="w-3.5 h-3.5" />
+        <span>Open Full View</span>
+      </button>
+
+      {/* Hover preview indicator badge */}
+      <div
+        className={`absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-black/70 text-white text-[10px] font-medium flex items-center gap-1 backdrop-blur-xs transition-opacity duration-200 pointer-events-none ${
+          isPlaying ? 'opacity-90' : 'opacity-0 group-hover/video:opacity-90'
+        }`}
+      >
+        {isPlaying ? (
+          <>
+            <Pause className="w-3 h-3 text-emerald-400" />
+            <span>Hovering (Playing muted)</span>
+          </>
+        ) : (
+          <>
+            <Play className="w-3 h-3 text-white" />
+            <span>Hover to preview</span>
+          </>
+        )}
+      </div>
+
+      {/* Center play icon overlay when paused */}
+      {!isPlaying && (
+        <div
+          onClick={onOpenFullView}
+          className="absolute inset-0 flex items-center justify-center cursor-pointer pointer-events-auto"
+        >
+          <div className="w-12 h-12 rounded-full bg-white/90 text-[#2563EB] flex items-center justify-center shadow-lg group-hover/video:scale-110 transition-transform">
+            <Play className="w-5 h-5 ml-0.5 fill-[#2563EB]" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
   isOpen,
@@ -66,7 +179,10 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
 
   // Categorize helper
   const getMemoryCategory = (mem: Memory): MediaFilterCategory => {
-    // 1. Check media assets inside first
+    // 1. Check if memory has a video URL
+    if (getMemoryVideoUrl(mem)) return 'VIDEO';
+
+    // 2. Check media assets inside first
     if (Array.isArray(mem.media) && mem.media.length > 0) {
       const hasVideo = mem.media.some((m) => m.mimeType?.startsWith('video/'));
       if (hasVideo) return 'VIDEO';
@@ -76,8 +192,9 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
       if (hasImage) return 'PHOTO';
     }
 
-    // 2. Check memoryType string
+    // 3. Check memoryType string
     const type = (mem.memoryType || mem.type || '').toUpperCase();
+    if (type === 'VIDEO') return 'VIDEO';
     if (type === 'PHOTO') return 'PHOTO';
     if (type === 'AUDIO') return 'AUDIO';
     if (type === 'DOCUMENT' || type === 'STORY' || type === 'RECIPE') {
@@ -349,12 +466,8 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
 
                   const isAudioActive = activeAudioPlayingId === mem.id;
 
-                  // Resolve author member who added the memory post
-                  const authorMember = (mem.addedByMemberId ? membersById.get(mem.addedByMemberId) : null) ||
-                    (mem.memberIds && mem.memberIds.length > 0 ? membersById.get(mem.memberIds[0]) : null);
-                  const authorName = mem.addedByMemberName ||
-                    (authorMember ? (authorMember.displayName || `${authorMember.firstName} ${authorMember.lastName}`.trim()) : null) ||
-                    'Family Member';
+                  // Resolve author member and latest profile photo
+                  const { authorMember, authorName, authorPhoto } = resolveMemoryAuthor(mem, members, membersById);
 
                   return (
                     <div
@@ -370,6 +483,8 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                         <div className="flex items-center gap-2 min-w-0">
                           <MemberAvatar
                             member={authorMember || ({ firstName: authorName.split(' ')[0] || 'F', lastName: authorName.split(' ')[1] || 'M' } as any)}
+                            src={authorPhoto || authorMember?.profilePhoto}
+                            gender={authorMember?.gender}
                             size="sm"
                             className="w-7 h-7 ring-1.5 ring-blue-500/20 shrink-0"
                           />
@@ -416,28 +531,10 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                       )}
 
                       {category === 'VIDEO' && (
-                        <div
-                          className="relative aspect-video rounded-xl overflow-hidden bg-slate-900 cursor-pointer group/video flex items-center justify-center border border-slate-700"
-                          onClick={() => setSelectedMemoryDetail(mem)}
-                        >
-                          {coverUrl ? (
-                            <img
-                              src={coverUrl}
-                              alt={mem.title}
-                              className="w-full h-full object-cover opacity-80"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-4">
-                              <Video className="w-10 h-10 text-indigo-400 mb-1 opacity-70" />
-                              <span className="text-[11px] text-slate-300">Family Video Keepsake</span>
-                            </div>
-                          )}
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-12 h-12 rounded-full bg-white/90 text-[#2563EB] flex items-center justify-center shadow-lg group-hover/video:scale-110 transition-transform">
-                              <Play className="w-5 h-5 ml-0.5 fill-[#2563EB]" />
-                            </div>
-                          </div>
-                        </div>
+                        <VideoMemoryCardPlayer
+                          memory={mem}
+                          onOpenFullView={() => setSelectedMemoryDetail(mem)}
+                        />
                       )}
 
                       {category === 'AUDIO' && (
@@ -637,18 +734,19 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
             >
               {/* Modal Header */}
               {(() => {
-                const modalAuthor = (selectedMemoryDetail.addedByMemberId ? membersById.get(selectedMemoryDetail.addedByMemberId) : null) ||
-                  (selectedMemoryDetail.memberIds && selectedMemoryDetail.memberIds.length > 0 ? membersById.get(selectedMemoryDetail.memberIds[0]) : null);
-                const modalAuthorName = selectedMemoryDetail.addedByMemberName ||
-                  (modalAuthor ? (modalAuthor.displayName || `${modalAuthor.firstName} ${modalAuthor.lastName}`.trim()) : null) ||
-                  'Family Member';
+                const { authorMember: modalAuthor, authorName: modalAuthorName, authorPhoto: modalAuthorPhoto } =
+                  resolveMemoryAuthor(selectedMemoryDetail, members, membersById);
 
                 return (
                   <div className="p-4 border-b border-[#E2E8F0] flex items-center justify-between bg-slate-50">
-                    <div className="flex items-center gap-2">
-                      <span className="p-1.5 rounded-lg bg-blue-100 text-[#2563EB]">
-                        <Sparkles className="w-4 h-4" />
-                      </span>
+                    <div className="flex items-center gap-2.5">
+                      <MemberAvatar
+                        member={modalAuthor || ({ firstName: modalAuthorName.split(' ')[0] || 'F', lastName: modalAuthorName.split(' ')[1] || 'M' } as any)}
+                        src={modalAuthorPhoto || modalAuthor?.profilePhoto}
+                        gender={modalAuthor?.gender}
+                        size="sm"
+                        className="w-8 h-8 ring-1.5 ring-blue-500/20 shrink-0"
+                      />
                       <div>
                         <h3 className="font-bold text-sm text-[#0F172A]">{selectedMemoryDetail.title}</h3>
                         <p className="text-[11px] text-[#64748B]">
@@ -669,15 +767,35 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
 
               {/* Modal Media Content */}
               <div className="p-6 overflow-y-auto space-y-4">
-                {getMemoryCoverUrl(selectedMemoryDetail) && (
-                  <div className="rounded-xl overflow-hidden bg-slate-900 border border-slate-200">
-                    <img
-                      src={getMemoryCoverUrl(selectedMemoryDetail)!}
-                      alt={selectedMemoryDetail.title}
-                      className="w-full max-h-96 object-contain mx-auto"
-                    />
-                  </div>
-                )}
+                {(() => {
+                  const modalVideoUrl = getMemoryVideoUrl(selectedMemoryDetail);
+                  const isVideo = getMemoryCategory(selectedMemoryDetail) === 'VIDEO' || !!modalVideoUrl;
+                  if (isVideo && modalVideoUrl) {
+                    return (
+                      <div className="rounded-xl overflow-hidden bg-black border border-slate-700 aspect-video flex items-center justify-center shadow-lg">
+                        <video
+                          src={modalVideoUrl}
+                          controls
+                          autoPlay
+                          playsInline
+                          className="w-full h-full max-h-[60vh] object-contain"
+                        />
+                      </div>
+                    );
+                  }
+                  if (getMemoryCoverUrl(selectedMemoryDetail)) {
+                    return (
+                      <div className="rounded-xl overflow-hidden bg-slate-900 border border-slate-200">
+                        <img
+                          src={getMemoryCoverUrl(selectedMemoryDetail)!}
+                          alt={selectedMemoryDetail.title}
+                          className="w-full max-h-96 object-contain mx-auto"
+                        />
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
 
                 <div>
                   <h4 className="font-bold text-base text-[#0F172A]">{selectedMemoryDetail.title}</h4>

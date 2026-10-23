@@ -51,9 +51,9 @@ describe('Phase 46: FamilyRoots — #FFF9D6 Background, Enlarged Nodes & Complet
 
       const html = renderToString(<HeritageMemberNode data={data} id="node-1" {...({} as any)} />);
 
-      // Background color (updated to rgb(255, 255, 30) per Phase 54)
-      expect(html).toMatch(/background-color:\s*(rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
-      expect(html).toMatch(/(bg-\[rgb\(255,255,30\)\]|bg-\[#FFF9D6\])/);
+      // Background color (#fef08a)
+      expect(html).toMatch(/background-color:\s*(#fef08a|rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
+      expect(html).toMatch(/(bg-\[#fef08a\]|bg-\[rgb\(255,255,30\)\]|bg-\[#FFF9D6\])/i);
 
       // Enlarged dimensions (280x160)
       expect(html).toContain('width:280px');
@@ -78,8 +78,8 @@ describe('Phase 46: FamilyRoots — #FFF9D6 Background, Enlarged Nodes & Complet
         />
       );
 
-      expect(html).toMatch(/background-color:\s*(rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
-      expect(html).toMatch(/(bg-\[rgb\(255,255,30\)\]|bg-\[#FFF9D6\])/);
+      expect(html).toMatch(/background-color:\s*(#fef08a|rgb\(255,\s*255,\s*30\)|#FFF9D6)/i);
+      expect(html).toMatch(/(bg-\[#fef08a\]|bg-\[rgb\(255,255,30\)\]|bg-\[#FFF9D6\])/i);
       expect(html).toContain('width:280px');
       expect(html).toContain('height:160px');
     });

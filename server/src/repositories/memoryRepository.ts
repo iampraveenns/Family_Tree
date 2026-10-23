@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 import { Memory, IMemory } from '../models/Memory.ts';
 import { Media } from '../models/Media.ts';
+import { FamilyMember } from '../models/FamilyMember.ts';
 import { MemoryType, MemoryVisibility, MemoryStatus } from '../constants/index.ts';
 
 export interface MemoryFilterOptions {
@@ -169,14 +170,45 @@ export class MemoryRepository {
         .lean(),
     ]);
 
-    // Attach media count and fallback cover photo if not explicitly set
+    // Attach media count, media list, latest author profile photo, and fallback cover photo if not explicitly set
     const memoryIds = rawMemories.map((m) => m._id);
-    const mediaCounts = await Media.aggregate([
-      { $match: { memoryId: { $in: memoryIds }, status: MemoryStatus.ACTIVE } },
-      { $group: { _id: '$memoryId', count: { $sum: 1 }, firstMedia: { $first: '$$ROOT' } } },
+    const [mediaCounts, allMedia, familyMembers] = await Promise.all([
+      Media.aggregate([
+        { $match: { memoryId: { $in: memoryIds }, status: MemoryStatus.ACTIVE } },
+        { $group: { _id: '$memoryId', count: { $sum: 1 }, firstMedia: { $first: '$$ROOT' } } },
+      ]),
+      Media.find({ memoryId: { $in: memoryIds }, status: MemoryStatus.ACTIVE }).lean(),
+      FamilyMember.find({ familyId: new Types.ObjectId(familyId) })
+        .select('firstName lastName displayName profilePhoto gender')
+        .lean(),
     ]);
 
+    const familyMembersById = new Map<string, any>(familyMembers.map((fm) => [fm._id.toString(), fm]));
+    const familyMembersByName = new Map<string, any>();
+    familyMembers.forEach((fm) => {
+      const dName = (fm.displayName || '').toLowerCase().trim();
+      const fName = `${fm.firstName} ${fm.lastName || ''}`.toLowerCase().trim();
+      const firstOnly = (fm.firstName || '').toLowerCase().trim();
+      if (dName) familyMembersByName.set(dName, fm);
+      if (fName) familyMembersByName.set(fName, fm);
+      if (firstOnly) familyMembersByName.set(firstOnly, fm);
+    });
+
     const mediaMap = new Map(mediaCounts.map((mc) => [mc._id.toString(), mc]));
+    const mediaByMemory = new Map<string, any[]>();
+    for (const med of allMedia) {
+      const mId = med.memoryId.toString();
+      const list = mediaByMemory.get(mId) || [];
+      const medId = med._id.toString();
+      list.push({
+        ...med,
+        id: medId,
+        streamUrl: `/api/media/${medId}/stream`,
+        thumbnailUrl: med.thumbnailStorageKey ? `/api/media/${medId}/thumbnail` : `/api/media/${medId}/stream`,
+        url: `/api/media/${medId}/stream`,
+      });
+      mediaByMemory.set(mId, list);
+    }
 
     const enrichedMemories = rawMemories.map((m: any) => {
       const mInfo = mediaMap.get(m._id.toString());
@@ -189,14 +221,36 @@ export class MemoryRepository {
           id: medId,
           streamUrl: `/api/media/${medId}/stream`,
           thumbnailUrl: `/api/media/${medId}/stream`,
+          url: `/api/media/${medId}/stream`,
         };
       }
+      const memoryMediaList = mediaByMemory.get(m._id.toString()) || (coverMediaObj ? [coverMediaObj] : []);
+
+      // Resolve author member and latest profile photo
+      let resolvedAuthor = null;
+      if (m.addedByMemberId) {
+        const rawId = (m.addedByMemberId._id || m.addedByMemberId.id || m.addedByMemberId).toString();
+        resolvedAuthor = familyMembersById.get(rawId) || (typeof m.addedByMemberId === 'object' ? m.addedByMemberId : null);
+      }
+      if (!resolvedAuthor && m.addedByMemberName) {
+        const cleanName = m.addedByMemberName.toLowerCase().trim();
+        resolvedAuthor = familyMembersByName.get(cleanName) || null;
+      }
+      const authorPhoto =
+        resolvedAuthor?.profilePhoto ||
+        (typeof m.addedByMemberId === 'object' ? m.addedByMemberId?.profilePhoto : null) ||
+        null;
+
       return {
         ...m,
         id: m._id.toString(),
-        mediaCount: mInfo?.count || 0,
+        mediaCount: mInfo?.count || memoryMediaList.length,
         coverMedia: coverMediaObj,
         coverMediaUrl: coverMediaObj?.streamUrl || null,
+        media: memoryMediaList,
+        authorPhoto,
+        addedByMemberPhoto: authorPhoto,
+        addedByMember: resolvedAuthor || m.addedByMemberId || null,
       };
     });
 

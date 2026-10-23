@@ -8,6 +8,7 @@ import { auditService } from './auditService.ts';
 import {
   AuditAction,
   Permission,
+  MemoryType,
   MemoryStatus,
   MemoryVisibility,
 } from '../constants/index.ts';
@@ -76,9 +77,15 @@ export class MediaService {
       visibility: memory.visibility,
     });
 
-    // Auto-set cover media if not present
-    if (!memory.coverMediaId && (processed.thumbnailStorageKey || processed.mimeType.startsWith('image/'))) {
+    // Auto-set cover media if not present or if video
+    const isVideo = processed.mimeType.startsWith('video/');
+    if (!memory.coverMediaId && (processed.thumbnailStorageKey || processed.mimeType.startsWith('image/') || isVideo)) {
       await memoryRepository.update(memoryId, { coverMediaId: media._id });
+    }
+
+    // Ensure database memory model correctly saves media type as VIDEO for video uploads
+    if (isVideo && memory.memoryType !== MemoryType.VIDEO) {
+      await memoryRepository.update(memoryId, { memoryType: MemoryType.VIDEO, coverMediaId: media._id });
     }
 
     // Audit log

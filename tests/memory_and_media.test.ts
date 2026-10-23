@@ -88,6 +88,8 @@ describe('Phase 4: Heritage Memory Vault & Secure Media Engine', () => {
         lastName: 'Pattara',
         gender: 'MALE',
         dateOfBirth: '1970-03-12',
+        isLiving: false,
+        dateOfDeath: '2020-01-01',
       });
     member1Id = m1Res.body.data._id;
 
@@ -99,6 +101,8 @@ describe('Phase 4: Heritage Memory Vault & Secure Media Engine', () => {
         lastName: 'Pattara',
         gender: 'FEMALE',
         dateOfBirth: '1974-06-25',
+        isLiving: false,
+        dateOfDeath: '2020-01-01',
       });
     member2Id = m2Res.body.data._id;
 
@@ -196,7 +200,7 @@ describe('Phase 4: Heritage Memory Vault & Secure Media Engine', () => {
     });
 
     it('rejects creation with removed memory types (Oral History, Letter, Certificate, Heirloom, Family Narrative)', async () => {
-      const removedTypes = ['ORAL_HISTORY', 'LETTER', 'CERTIFICATE', 'HEIRLOOM', 'FAMILY_NARRATIVE', 'VIDEO', 'OTHER'];
+      const removedTypes = ['ORAL_HISTORY', 'LETTER', 'CERTIFICATE', 'HEIRLOOM', 'FAMILY_NARRATIVE', 'OTHER'];
       for (const badType of removedTypes) {
         const res = await request(app)
           .post(`/api/families/${familyAId}/memories`)
@@ -212,9 +216,10 @@ describe('Phase 4: Heritage Memory Vault & Secure Media Engine', () => {
       }
     });
 
-    it('accepts creation with all 5 retained memory types: PHOTO, STORY, AUDIO, DOCUMENT, RECIPE', async () => {
+    it('accepts creation with all 6 retained memory types: PHOTO, VIDEO, STORY, AUDIO, DOCUMENT, RECIPE', async () => {
       const allowedTypes = [
         MemoryType.PHOTO,
+        MemoryType.VIDEO,
         MemoryType.STORY,
         MemoryType.AUDIO,
         MemoryType.DOCUMENT,
@@ -288,6 +293,40 @@ describe('Phase 4: Heritage Memory Vault & Secure Media Engine', () => {
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.error?.message).toContain('Unsupported file type');
+    });
+
+    it('uploads a valid video file (MP4) to a video memory and preserves VIDEO type and streaming', async () => {
+      const vMemRes = await request(app)
+        .post(`/api/families/${familyAId}/memories`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          title: 'Ancestral Village Documentary Footage',
+          memoryType: MemoryType.VIDEO,
+          visibility: MemoryVisibility.FAMILY,
+        });
+
+      expect(vMemRes.status).toBe(201);
+      const vMemId = vMemRes.body.data._id;
+      expect(vMemRes.body.data.memoryType).toBe(MemoryType.VIDEO);
+
+      const sampleVideoBuffer = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6d, 0x70, 0x34, 0x32, 0x00, 0x00, 0x00, 0x00]);
+      const vidUploadRes = await request(app)
+        .post(`/api/families/${familyAId}/memories/${vMemId}/media`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .attach('file', sampleVideoBuffer, 'village_heritage.mp4');
+
+      expect(vidUploadRes.status).toBe(201);
+      expect(vidUploadRes.body.data.mimeType).toBe('video/mp4');
+      expect(vidUploadRes.body.data.streamUrl).toBeDefined();
+
+      const getMemRes = await request(app)
+        .get(`/api/families/${familyAId}/memories/${vMemId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+
+      expect(getMemRes.status).toBe(200);
+      expect(getMemRes.body.data.memoryType).toBe(MemoryType.VIDEO);
+      expect(getMemRes.body.data.media).toHaveLength(1);
+      expect(getMemRes.body.data.media[0].mimeType).toBe('video/mp4');
     });
   });
 

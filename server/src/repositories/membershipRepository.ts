@@ -36,7 +36,7 @@ export class MembershipRepository {
     if (!Types.ObjectId.isValid(familyId)) return 0;
     return FamilyMembership.countDocuments({
       familyId,
-      role: { $in: [Role.ADMIN, 'ADMIN', 'FAMILY_OWNER', 'FAMILY_ADMIN'] },
+      role: { $in: [Role.ADMIN, Role.FAMILY_OWNER, Role.FAMILY_ADMIN] },
       status: 'ACTIVE',
     }).exec();
   }
@@ -45,7 +45,7 @@ export class MembershipRepository {
     if (!Types.ObjectId.isValid(familyId)) return null;
     return FamilyMembership.findOne({
       familyId,
-      role: { $in: [Role.ADMIN, 'ADMIN', 'FAMILY_OWNER', 'FAMILY_ADMIN'] },
+      role: { $in: [Role.ADMIN, Role.FAMILY_OWNER, Role.FAMILY_ADMIN] },
       status: 'ACTIVE',
     }).exec();
   }
