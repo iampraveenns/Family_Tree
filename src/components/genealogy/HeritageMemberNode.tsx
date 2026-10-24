@@ -27,6 +27,7 @@ export interface HeritageMemberNodeData {
   isPrimaryPartner?: boolean;
   isSecondarySpouse?: boolean;
   hideRelationshipActions?: boolean;
+  canEdit?: boolean;
   marriageDate?: string | null;
   onSelect?: (member: FamilyMember) => void;
   onHover?: (id: string | null) => void;
@@ -194,6 +195,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
     isPrimaryPartner = true,
     isSecondarySpouse = false,
     hideRelationshipActions = false,
+    canEdit = true,
     onSelect,
     onHover,
     onAddRelative,
@@ -477,16 +479,20 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
             <User className="w-3.5 h-3.5 text-[#2563EB]" />
             <span className="text-[#17233C]">Profile</span>
           </button>
-          <div className="w-[1px] h-3.5 bg-[#B8D4FF]" />
-          <button
-            type="button"
-            onClick={() => onEditProfile?.(member)}
-            className="px-2.5 py-1 rounded-lg hover:bg-[#FEF08A]/50 text-[#17233C] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
-            title="Edit Member Profile"
-          >
-            <Pencil className="w-3.5 h-3.5 text-[#2563EB]" />
-            <span className="text-[#17233C]">Edit</span>
-          </button>
+          {canEdit && (
+            <>
+              <div className="w-[1px] h-3.5 bg-[#B8D4FF]" />
+              <button
+                type="button"
+                onClick={() => onEditProfile?.(member)}
+                className="px-2.5 py-1 rounded-lg hover:bg-[#FEF08A]/50 text-[#17233C] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+                title="Edit Member Profile"
+              >
+                <Pencil className="w-3.5 h-3.5 text-[#2563EB]" />
+                <span className="text-[#17233C]">Edit</span>
+              </button>
+            </>
+          )}
           <div className="w-[1px] h-3.5 bg-[#B8D4FF]" />
           <button
             type="button"
@@ -507,7 +513,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
           {!isSecondarySpouse && (
             <span
               data-testid={`node-gen-badge-${member.id}`}
-              className="px-2 py-0.5 rounded-md bg-[#2563EB]/10 text-[#1D4ED8] border border-[#B8D4FF] text-[10px] font-bold tracking-tight uppercase shrink-0 shadow-2xs"
+              className="px-2 py-0.5 rounded-md bg-[#2563EB]/10 text-[#17233C] border border-[#B8D4FF] text-[10px] font-bold tracking-tight uppercase shrink-0 shadow-2xs"
             >
               {`Gen ${member.generation || 1}`}
             </span>
@@ -524,25 +530,29 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
 
         {/* Two Compact Status Badges: [Living / Death Circle Indicator] and [Single / Married] */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Badge 1: Living / Death circular indicator (Clickable to edit life status) */}
+          {/* Badge 1: Living / Death circular indicator (Clickable to edit life status only if canEdit) */}
           <button
             type="button"
+            disabled={!canEdit}
             onClick={(e) => {
               e.stopPropagation();
+              if (!canEdit) return;
               if (onEditLifeStatus) {
                 onEditLifeStatus(member);
               } else if (onToggleLiving) {
                 onToggleLiving(member);
               }
             }}
-            title={`Edit life status for ${fullName} (${isDeceased ? 'Rest in Peace' : 'Living'})`}
-            aria-label={`Edit life status for ${fullName}. Currently ${isDeceased ? 'RIP (Rest in Peace)' : 'Living'}`}
+            title={canEdit ? `Edit life status for ${fullName} (${isDeceased ? 'Rest in Peace' : 'Living'})` : `${fullName} (${isDeceased ? 'Rest in Peace' : 'Living'})`}
+            aria-label={`Life status for ${fullName}. Currently ${isDeceased ? 'RIP (Rest in Peace)' : 'Living'}`}
             data-status={isDeceased ? 'RIP' : 'Living'}
             data-testid={`life-status-indicator-${member.id}`}
-            className={`w-[21px] h-[21px] inline-flex items-center justify-center rounded-full transition-colors cursor-pointer select-none shrink-0 ${
+            className={`w-[21px] h-[21px] inline-flex items-center justify-center rounded-full transition-colors select-none shrink-0 ${
+              !canEdit ? 'cursor-default' : 'cursor-pointer'
+            } ${
               !isDeceased
-                ? 'bg-[#DCFCE7] border border-[#86EFAC] hover:bg-[#BBF7D0]'
-                : 'bg-[#F1F5F9] border border-[#CBD5E1] hover:bg-[#E2E8F0]'
+                ? `bg-[#DCFCE7] border border-[#86EFAC] ${canEdit ? 'hover:bg-[#BBF7D0]' : ''}`
+                : `bg-[#F1F5F9] border border-[#CBD5E1] ${canEdit ? 'hover:bg-[#E2E8F0]' : ''}`
             }`}
           >
             {!isDeceased ? (
@@ -730,7 +740,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
 
       {/* Card Footer: Quick Add Relative Buttons */}
       <div className="pt-1 border-t border-[#B8D4FF]/60 flex items-center justify-between text-[11px] min-h-[30px]">
-        {!shouldHideActions ? (
+        {canEdit && !shouldHideActions ? (
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -789,20 +799,22 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
         )}
 
         <div className="flex items-center gap-0.5 ml-auto">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEditProfile?.(member);
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            title="Edit Member Profile"
-            aria-label="Edit Member Profile"
-            className="p-1 rounded text-[#17233C]/70 hover:text-[#2563EB] hover:bg-[#EFF6FF] transition-colors cursor-pointer"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditProfile?.(member);
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              title="Edit Member Profile"
+              aria-label="Edit Member Profile"
+              className="p-1 rounded text-[#17233C]/70 hover:text-[#2563EB] hover:bg-[#EFF6FF] transition-colors cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={(e) => {

@@ -17,6 +17,7 @@ export interface MemberFormData {
   exactBirthDate: string;
   deathDate: string;
   isLiving: boolean;
+  registeredEmail?: string;
   occupation: string;
   birthPlace: string;
   houseName?: string;
@@ -100,6 +101,9 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
   const [dateOfBirth, setDateOfBirth] = useState(getInitialDob);
   const [deathDate, setDeathDate] = useState(() => editMember?.dateOfDeath?.slice(0, 10) || '');
   const [isLiving, setIsLiving] = useState(() => editMember?.isLiving ?? true);
+  const [registeredEmail, setRegisteredEmail] = useState(
+    () => (editMember as any)?.registeredEmail || (editMember as any)?.email || ''
+  );
   const [occupation, setOccupation] = useState(() => editMember?.occupation || '');
   const [birthPlace, setBirthPlace] = useState(() => editMember?.birthPlace || '');
   const [houseName, setHouseName] = useState(
@@ -313,6 +317,11 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
       return;
     }
 
+    if (!editMember && isLiving && !registeredEmail.trim()) {
+      setFormError('Cannot create member node: This person must have a registered account first.');
+      return;
+    }
+
     setFormError(null);
     try {
       const hasDeathDate = Boolean(deathDate && deathDate.trim());
@@ -330,6 +339,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         exactBirthDate: dateOfBirth.trim(),
         deathDate: effectiveDeathDate,
         isLiving: effectiveLiving,
+        registeredEmail: registeredEmail.trim() || undefined,
         occupation: occupation.trim(),
         birthPlace: birthPlace.trim(),
         houseName: houseName.trim(),
@@ -352,6 +362,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         setDateOfBirth('');
         setDeathDate('');
         setIsLiving(true);
+        setRegisteredEmail('');
         setOccupation('');
         setBirthPlace('');
         setHouseName('');
@@ -838,6 +849,80 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                 onChange={(e) => setLastName(e.target.value)}
                 required
               />
+            </div>
+
+            {/* Life Status & Required Registered Account Email */}
+            <div className="p-3 rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-semibold text-[#0F172A] block">
+                    Life Status
+                  </label>
+                  <p className="text-[11px] text-[#64748B]">
+                    {isLiving ? 'Living relative (Requires registered account)' : 'Deceased ancestor (Account not required)'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLiving(true);
+                      setDeathDate('');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                      isLiving
+                        ? 'bg-[#2563EB] text-white shadow-xs font-semibold'
+                        : 'bg-white text-[#475569] border border-[#CBD5E1]'
+                    }`}
+                  >
+                    Living
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLiving(false);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                      !isLiving
+                        ? 'bg-[#475569] text-white shadow-xs font-semibold'
+                        : 'bg-white text-[#475569] border border-[#CBD5E1]'
+                    }`}
+                  >
+                    Deceased / Ancestor
+                  </button>
+                </div>
+              </div>
+
+              {isLiving ? (
+                <div>
+                  <Input
+                    type="email"
+                    label="Registered Account Email *"
+                    placeholder="e.g. user@familyroots.org"
+                    value={registeredEmail}
+                    onChange={(e) => {
+                      setRegisteredEmail(e.target.value);
+                      if (formError) setFormError(null);
+                    }}
+                    required={isLiving}
+                  />
+                  <p className="text-[10.5px] text-[#64748B] mt-1">
+                    Every living relative node must be linked to an existing registered user account.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <Input
+                    type="date"
+                    label="Date of Death (Optional for historical ancestors)"
+                    value={deathDate}
+                    onChange={(e) => setDeathDate(e.target.value)}
+                  />
+                  <p className="text-[10.5px] text-[#64748B]">
+                    Registered user accounts are not required for deceased historical ancestors.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Gender + Occupation */}

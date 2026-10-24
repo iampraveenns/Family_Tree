@@ -359,7 +359,9 @@ export const requireFamilyRoles = (allowedRoles: Role[]) => {
         req.membership = membership;
       }
 
-      if (!allowedRoles.includes(req.membership.role)) {
+      const userRole = normalizeRole(req.membership.role);
+      const normalizedAllowed = allowedRoles.map((r) => normalizeRole(r));
+      if (!normalizedAllowed.includes(userRole)) {
         const familyId = req.params.familyId || req.membership.familyId.toString();
         await auditService.log(
           familyId,

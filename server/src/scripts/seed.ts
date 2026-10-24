@@ -17,6 +17,7 @@ import crypto from 'crypto';
 import { getMediaStorageService } from '../services/storage/MediaStorageService.ts';
 import {
   Role,
+  DEFAULT_ROLE_PERMISSIONS,
   RelationshipType,
   RelationshipStatus,
   UserStatus,
@@ -433,9 +434,9 @@ export async function runSeed(): Promise<void> {
       userId: devUser._id,
       familyId: family._id,
       memberId: createdMembers.raj._id,
-      role: Role.FAMILY_OWNER,
+      role: Role.ADMIN,
       status: 'ACTIVE',
-      permissions: Object.values(Role),
+      permissions: DEFAULT_ROLE_PERMISSIONS[Role.ADMIN],
     });
 
     // 8. Create Initial Audit Logs

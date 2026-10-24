@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFamilyStore } from '../../stores/useFamilyStore.ts';
+import { useCollaborationStore } from '../../stores/useCollaborationStore.ts';
 import { useMemoryStore } from '../../stores/useMemoryStore.ts';
 import { useTimelineStore } from '../../stores/useTimelineStore.ts';
 import { useToastStore } from '../../stores/useToastStore.ts';
@@ -101,15 +102,26 @@ const FamilyTreeInner: React.FC = () => {
 
   const { memories, fetchMemories } = useMemoryStore();
   const { events, fetchTimeline } = useTimelineStore();
+  const { userPermissions, fetchPermissions } = useCollaborationStore();
 
   useEffect(() => {
     if (currentFamily?.id) {
       if (memories.length === 0) fetchMemories(currentFamily.id);
       if (events.length === 0) fetchTimeline(currentFamily.id);
+      fetchPermissions(currentFamily.id);
     } else {
       fetchFamilyTree();
     }
-  }, [currentFamily?.id, fetchFamilyTree]);
+  }, [currentFamily?.id, fetchFamilyTree, fetchPermissions, memories.length, events.length]);
+
+  const isAdmin = useMemo(() => {
+    if (!userPermissions) {
+      return true; // Fallback during initial load
+    }
+    const role = userPermissions.role ? String(userPermissions.role).toUpperCase() : '';
+    if (role === 'VIEWER') return false;
+    return role === 'ADMIN' || userPermissions.capabilities?.canEditAllMembers === true;
+  }, [userPermissions]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const branchScrollRef = useRef<HTMLDivElement>(null);
@@ -717,6 +729,7 @@ const FamilyTreeInner: React.FC = () => {
           isPrimaryPartner,
           isSecondarySpouse,
           hideRelationshipActions,
+          canEdit: isAdmin,
           marriageDate: effectiveMarriageDate,
           onSelect: (_sel: FamilyMember) => {
             // Node/card click -> NO profile opening and NO automatic selection (Requirements 1, 2, 9)
@@ -755,7 +768,7 @@ const FamilyTreeInner: React.FC = () => {
         },
       };
     });
-  }, [layoutResult.nodes, handleOpenAddRelative, handleOpenEditModal, handleToggleLiving, handleOpenLifeStatusModal, members, isSubmitting, memberHasSpouse]);
+  }, [layoutResult.nodes, handleOpenAddRelative, handleOpenEditModal, handleToggleLiving, handleOpenLifeStatusModal, members, isSubmitting, memberHasSpouse, isAdmin]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(finalNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutResult.edges);
@@ -1169,6 +1182,7 @@ const FamilyTreeInner: React.FC = () => {
           dateOfBirth: birthDate,
           dateOfDeath: effectiveDeathDate,
           isLiving: effectiveLiving,
+          registeredEmail: formData.registeredEmail?.trim() || undefined,
           occupation: formData.occupation || undefined,
           birthPlace: formData.birthPlace || undefined,
           houseName: formData.houseName || undefined,
@@ -1252,6 +1266,7 @@ const FamilyTreeInner: React.FC = () => {
         dateOfBirth: birthDate,
         dateOfDeath: effectiveDeathDate,
         isLiving: effectiveLiving,
+        registeredEmail: formData.registeredEmail?.trim() || undefined,
         occupation: formData.occupation || undefined,
         birthPlace: formData.birthPlace || undefined,
         houseName: formData.houseName || undefined,
@@ -1608,33 +1623,35 @@ const FamilyTreeInner: React.FC = () => {
             )}
           </div>
 
-          {/* Add Relative / Root Ancestor Button */}
-          <Button
-            size="sm"
-            leftIcon={<Plus className="w-3.5 h-3.5" />}
-            className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-xs"
-            onClick={async () => {
-              let famId = currentFamily?.id || activeFamilyId || useFamilyStore.getState().activeFamilyId;
-              if (!famId && availableFamilies.length > 0) {
-                famId = availableFamilies[0].id;
-                await setActiveFamilyId(famId);
-              }
+          {/* Add Relative / Root Ancestor Button (Admin Only) */}
+          {isAdmin && (
+            <Button
+              size="sm"
+              leftIcon={<Plus className="w-3.5 h-3.5" />}
+              className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-xs"
+              onClick={async () => {
+                let famId = currentFamily?.id || activeFamilyId || useFamilyStore.getState().activeFamilyId;
+                if (!famId && availableFamilies.length > 0) {
+                  famId = availableFamilies[0].id;
+                  await setActiveFamilyId(famId);
+                }
 
-              if (!famId) {
-                setIsCreateFamilyOpen(true);
-                return;
-              }
-              if (members.length === 0) {
-                setTargetReferenceMember(null);
-                setIsAddRelationshipOpen(true);
-              } else {
-                setTargetReferenceMember(selectedMember || members[0] || null);
-                setIsAddRelationshipOpen(true);
-              }
-            }}
-          >
-            {members.length === 0 ? 'Add Root Ancestor' : 'Add Relative'}
-          </Button>
+                if (!famId) {
+                  setIsCreateFamilyOpen(true);
+                  return;
+                }
+                if (members.length === 0) {
+                  setTargetReferenceMember(null);
+                  setIsAddRelationshipOpen(true);
+                } else {
+                  setTargetReferenceMember(selectedMember || members[0] || null);
+                  setIsAddRelationshipOpen(true);
+                }
+              }}
+            >
+              {members.length === 0 ? 'Add Root Ancestor' : 'Add Relative'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1807,19 +1824,21 @@ const FamilyTreeInner: React.FC = () => {
                     size="xl"
                     isLiving={activeDrawerMember.isLiving}
                   />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingPhotoMemberId(
-                        editingPhotoMemberId === activeDrawerMember.id ? null : activeDrawerMember.id
-                      );
-                      setPhotoUrlInput(activeDrawerMember.profilePhoto || (activeDrawerMember as any).profileImageUrl || '');
-                    }}
-                    className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-md transition-colors cursor-pointer"
-                    title="Change Photo URL"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                  </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingPhotoMemberId(
+                          editingPhotoMemberId === activeDrawerMember.id ? null : activeDrawerMember.id
+                        );
+                        setPhotoUrlInput(activeDrawerMember.profilePhoto || (activeDrawerMember as any).profileImageUrl || '');
+                      }}
+                      className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-md transition-colors cursor-pointer"
+                      title="Change Photo URL"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 {editingPhotoMemberId === activeDrawerMember.id && (
@@ -2033,58 +2052,62 @@ const FamilyTreeInner: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditModal(activeDrawerMember)}
-                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border-[1.5px] border-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1D4ED8] text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                      <span>Edit Member Profile</span>
-                    </button>
-                  </div>
+                  {isAdmin && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditModal(activeDrawerMember)}
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border-[1.5px] border-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1D4ED8] text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span>Edit Member Profile</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Tab 2: Family Information (with Add Child & Add Spouse actions) */}
               {drawerTab === 'family' && (
                 <div className="mt-4 space-y-4 text-xs">
-                  {/* Functional Quick Actions */}
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1 flex flex-col gap-1">
+                  {/* Functional Quick Actions (Admin Only) */}
+                  {isAdmin && (
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 flex flex-col gap-1">
+                        <button
+                          type="button"
+                          disabled={!activeDrawerMember || !memberHasSpouse(activeDrawerMember.id)}
+                          onClick={() => handleOpenAddRelative(activeDrawerMember!, 'CHILD')}
+                          title={
+                            activeDrawerMember && memberHasSpouse(activeDrawerMember.id)
+                              ? 'Add Child'
+                              : 'Add a spouse before adding a child.'
+                          }
+                          className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold shadow-xs transition-colors ${
+                            activeDrawerMember && memberHasSpouse(activeDrawerMember.id)
+                              ? 'bg-[#2563EB] hover:bg-[#1D4ED8] text-white cursor-pointer'
+                              : 'opacity-45 cursor-not-allowed bg-slate-200 text-slate-500'
+                          }`}
+                        >
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>+ Add Child</span>
+                        </button>
+                        {activeDrawerMember && !memberHasSpouse(activeDrawerMember.id) && (
+                          <p className="text-[10px] text-amber-600 font-medium text-center">
+                            Add a spouse before adding a child.
+                          </p>
+                        )}
+                      </div>
                       <button
                         type="button"
-                        disabled={!activeDrawerMember || !memberHasSpouse(activeDrawerMember.id)}
-                        onClick={() => handleOpenAddRelative(activeDrawerMember!, 'CHILD')}
-                        title={
-                          activeDrawerMember && memberHasSpouse(activeDrawerMember.id)
-                            ? 'Add Child'
-                            : 'Add a spouse before adding a child.'
-                        }
-                        className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold shadow-xs transition-colors ${
-                          activeDrawerMember && memberHasSpouse(activeDrawerMember.id)
-                            ? 'bg-[#2563EB] hover:bg-[#1D4ED8] text-white cursor-pointer'
-                            : 'opacity-45 cursor-not-allowed bg-slate-200 text-slate-500'
-                        }`}
+                        onClick={() => handleOpenAddRelative(activeDrawerMember!, 'SPOUSE')}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white text-[#2563EB] border-[1.5px] border-[#2563EB] hover:bg-[#EFF6FF] text-xs font-semibold shadow-xs transition-colors cursor-pointer"
                       >
-                        <UserPlus className="w-3.5 h-3.5" />
-                        <span>+ Add Child</span>
+                        <Heart className="w-3.5 h-3.5" />
+                        <span>+ Add Spouse</span>
                       </button>
-                      {activeDrawerMember && !memberHasSpouse(activeDrawerMember.id) && (
-                        <p className="text-[10px] text-amber-600 font-medium text-center">
-                          Add a spouse before adding a child.
-                        </p>
-                      )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenAddRelative(activeDrawerMember!, 'SPOUSE')}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white text-[#2563EB] border-[1.5px] border-[#2563EB] hover:bg-[#EFF6FF] text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-                    >
-                      <Heart className="w-3.5 h-3.5" />
-                      <span>+ Add Spouse</span>
-                    </button>
-                  </div>
+                  )}
 
                   {/* Immediate Relatives Lists */}
                   <div className="space-y-3.5">
@@ -2094,13 +2117,15 @@ const FamilyTreeInner: React.FC = () => {
                         <span className="font-bold text-[#0F172A]">
                           Parents ({immediateRelatives.parents.length})
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenAddRelative(activeDrawerMember, 'PARENT')}
-                          className="text-[11px] font-medium text-[#2563EB] hover:underline cursor-pointer"
-                        >
-                          + Add Parent
-                        </button>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAddRelative(activeDrawerMember, 'PARENT')}
+                            className="text-[11px] font-medium text-[#2563EB] hover:underline cursor-pointer"
+                          >
+                            + Add Parent
+                          </button>
+                        )}
                       </div>
                       {immediateRelatives.parents.length > 0 ? (
                         <div className="space-y-1.5">
@@ -2141,13 +2166,15 @@ const FamilyTreeInner: React.FC = () => {
                         <span className="font-bold text-[#0F172A]">
                           Spouse & Partners ({immediateRelatives.spouses.length})
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenAddRelative(activeDrawerMember, 'SPOUSE')}
-                          className="text-[11px] font-medium text-[#2563EB] hover:underline cursor-pointer"
-                        >
-                          + Add Spouse
-                        </button>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAddRelative(activeDrawerMember, 'SPOUSE')}
+                            className="text-[11px] font-medium text-[#2563EB] hover:underline cursor-pointer"
+                          >
+                            + Add Spouse
+                          </button>
+                        )}
                       </div>
                       {immediateRelatives.spouses.length > 0 ? (
                         <div className="space-y-1.5">
@@ -2197,7 +2224,7 @@ const FamilyTreeInner: React.FC = () => {
                                     </div>
                                   </div>
 
-                                  {spouseRel && (
+                                  {isAdmin && spouseRel && (
                                     <button
                                       type="button"
                                       onClick={(e) => {

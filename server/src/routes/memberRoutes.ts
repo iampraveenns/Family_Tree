@@ -6,14 +6,15 @@ import { createMemberSchema, updateMemberSchema } from '../validators/index.ts';
 import {
   requireAuthentication,
   requireFamilyMembership,
+  requireFamilyRoles,
   requirePermission,
   requireMemberScope,
 } from '../middleware/auth.ts';
-import { Permission } from '../constants/index.ts';
+import { Permission, Role } from '../constants/index.ts';
 
 const router = Router({ mergeParams: true });
 
-const conditionalMemberAuth = (permission?: Permission) => {
+const requireAdminMemberAuth = () => {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.headers.authorization) {
       return next();
@@ -23,16 +24,13 @@ const conditionalMemberAuth = (permission?: Permission) => {
       if (err) return next(err);
       return requireFamilyMembership(req, res, (err2?: any) => {
         if (err2) return next(err2);
-        if (permission) {
-          return requirePermission(permission)(req, res, next);
-        }
-        return next();
+        return requireFamilyRoles([Role.ADMIN])(req, res, next);
       });
     });
   };
 };
 
-const conditionalMemberScope = (permission: Permission) => {
+const requireReadMemberAuth = () => {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.headers.authorization) {
       return next();
@@ -42,7 +40,7 @@ const conditionalMemberScope = (permission: Permission) => {
       if (err) return next(err);
       return requireFamilyMembership(req, res, (err2?: any) => {
         if (err2) return next(err2);
-        return requireMemberScope(permission)(req, res, next);
+        return requireFamilyRoles([Role.ADMIN, Role.VIEWER])(req, res, next);
       });
     });
   };
@@ -50,38 +48,38 @@ const conditionalMemberScope = (permission: Permission) => {
 
 router.post(
   '/',
-  conditionalMemberAuth(Permission.CREATE_MEMBER),
+  requireAdminMemberAuth(),
   validate({ body: createMemberSchema }),
   (req, res, next) => {
     memberController.createMember(req, res, next);
   }
 );
 
-router.get('/', conditionalMemberAuth(Permission.VIEW_MEMBER), (req, res, next) => {
+router.get('/', requireReadMemberAuth(), (req, res, next) => {
   memberController.getMembers(req, res, next);
 });
 
-router.get('/:memberId', conditionalMemberAuth(Permission.VIEW_MEMBER), (req, res, next) => {
+router.get('/:memberId', requireReadMemberAuth(), (req, res, next) => {
   memberController.getMemberById(req, res, next);
 });
 
 router.patch(
   '/:memberId',
-  conditionalMemberScope(Permission.EDIT_MEMBER),
+  requireAdminMemberAuth(),
   validate({ body: updateMemberSchema }),
   (req, res, next) => {
     memberController.updateMember(req, res, next);
   }
 );
 
-router.delete('/:memberId', conditionalMemberScope(Permission.DELETE_MEMBER), (req, res, next) => {
+router.delete('/:memberId', requireAdminMemberAuth(), (req, res, next) => {
   memberController.deleteMember(req, res, next);
 });
 
 // Member relationships endpoint: GET /api/families/:familyId/members/:memberId/relationships
 router.get(
   '/:memberId/relationships',
-  conditionalMemberAuth(Permission.VIEW_MEMBER),
+  requireReadMemberAuth(),
   (req, res, next) => {
     relationshipController.getMemberRelationships(req, res, next);
   }
