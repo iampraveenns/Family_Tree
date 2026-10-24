@@ -8,7 +8,9 @@ export type NotificationType =
   | 'CONTRIBUTION_REJECTED'
   | 'RELATIONSHIP_UPDATED'
   | 'MILESTONE_ALERT'
-  | 'NEW_CONTRIBUTION';
+  | 'NEW_CONTRIBUTION'
+  | 'MEMBER_ADDED'
+  | 'MEMORY_ADDED';
 
 export interface IFamilyNotification extends Document {
   _id: Types.ObjectId;
@@ -52,6 +54,8 @@ const FamilyNotificationSchema = new Schema<IFamilyNotification>(
         'RELATIONSHIP_UPDATED',
         'MILESTONE_ALERT',
         'NEW_CONTRIBUTION',
+        'MEMBER_ADDED',
+        'MEMORY_ADDED',
       ],
       required: true,
       index: true,

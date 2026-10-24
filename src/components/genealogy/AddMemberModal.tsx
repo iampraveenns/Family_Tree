@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GitFork, ChevronDown, ChevronUp, Loader2, Camera } from 'lucide-react';
+import { GitFork, ChevronDown, ChevronUp, Loader2, Camera, UserPlus, CheckCircle2, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Modal } from '../ui/Modal.tsx';
 import { Input } from '../ui/Input.tsx';
@@ -123,8 +123,55 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
     () => Boolean(editMember?.biography || (editMember as any)?.notes)
   );
   const [formError, setFormError] = useState<string | null>(null);
+  const [showRegisterInline, setShowRegisterInline] = useState(false);
+  const [inlinePassword, setInlinePassword] = useState('Welcome123!');
+  const [isRegisteringInline, setIsRegisteringInline] = useState(false);
+  const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
+  const [inlineError, setInlineError] = useState<string | null>(null);
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleRegisterAccountInline = async () => {
+    if (!registeredEmail.trim()) {
+      setInlineError('Please enter the relative email address first.');
+      return;
+    }
+    if (!firstName.trim() || !lastName.trim()) {
+      setInlineError('Please fill in First and Last names above first.');
+      return;
+    }
+    if (!inlinePassword || inlinePassword.length < 8) {
+      setInlineError('Password must be at least 8 characters.');
+      return;
+    }
+    setIsRegisteringInline(true);
+    setInlineError(null);
+    setInlineSuccess(null);
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          displayName: `${firstName.trim()} ${lastName.trim()}`,
+          name: `${firstName.trim()} ${lastName.trim()}`,
+          email: registeredEmail.trim().toLowerCase(),
+          password: inlinePassword,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        setInlineSuccess(`User account created for "${registeredEmail.trim()}"! Ready to add to tree.`);
+        setFormError(null);
+      } else {
+        const msg = json?.error?.message || json?.message || 'Failed to create user account.';
+        setInlineError(msg);
+      }
+    } catch {
+      setInlineError('Network error connecting to auth service.');
+    } finally {
+      setIsRegisteringInline(false);
+    }
+  };
 
   const handlePhotoFile = (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -317,7 +364,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
       return;
     }
 
-    if (!editMember && isLiving && !registeredEmail.trim()) {
+    if (!editMember && !registeredEmail.trim()) {
       setFormError('Cannot create member node: This person must have a registered account first.');
       return;
     }
@@ -859,7 +906,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                     Life Status
                   </label>
                   <p className="text-[11px] text-[#64748B]">
-                    {isLiving ? 'Living relative (Requires registered account)' : 'Deceased ancestor (Account not required)'}
+                    Universally linked to a registered JSON user account
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -893,34 +940,100 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                 </div>
               </div>
 
-              {isLiving ? (
-                <div>
-                  <Input
-                    type="email"
-                    label="Registered Account Email *"
-                    placeholder="e.g. user@familyroots.org"
-                    value={registeredEmail}
-                    onChange={(e) => {
-                      setRegisteredEmail(e.target.value);
-                      if (formError) setFormError(null);
-                    }}
-                    required={isLiving}
-                  />
-                  <p className="text-[10.5px] text-[#64748B] mt-1">
-                    Every living relative node must be linked to an existing registered user account.
+              <div>
+                <Input
+                  type="email"
+                  label="Registered Account Email *"
+                  placeholder="e.g. arun@example.com"
+                  value={registeredEmail}
+                  onChange={(e) => {
+                    setRegisteredEmail(e.target.value);
+                    if (formError) setFormError(null);
+                    if (inlineError) setInlineError(null);
+                  }}
+                  required
+                />
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-[10.5px] text-[#64748B]">
+                    Every person added to the tree must have a registered account created via JSON authentication.
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRegisterInline((prev) => !prev);
+                      setInlineError(null);
+                      setInlineSuccess(null);
+                    }}
+                    className="text-[10.5px] font-semibold text-[#2563EB] hover:underline cursor-pointer shrink-0 ml-2"
+                  >
+                    {showRegisterInline ? 'Hide Account Creator' : '+ Register Account for this Relative'}
+                  </button>
                 </div>
-              ) : (
+
+                {showRegisterInline && (
+                  <div className="mt-2.5 p-3 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-[#1E3A8A]">
+                      <UserPlus className="w-3.5 h-3.5 text-[#2563EB]" />
+                      <span>Instant JSON Account Registration for Relative</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600">
+                      Creates the user account via JSON authentication and links it to this tree node.
+                    </p>
+
+                    {inlineSuccess && (
+                      <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-1.5 font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>{inlineSuccess}</span>
+                      </div>
+                    )}
+
+                    {inlineError && (
+                      <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
+                        {inlineError}
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row gap-2 items-center">
+                      <div className="w-full sm:flex-1">
+                        <Input
+                          type="password"
+                          label="Initial Password"
+                          value={inlinePassword}
+                          onChange={(e) => setInlinePassword(e.target.value)}
+                          placeholder="Min 8 characters"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRegisterAccountInline}
+                        disabled={isRegisteringInline}
+                        className="w-full sm:w-auto mt-4 px-3 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-60"
+                      >
+                        {isRegisteringInline ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Registering...</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span>Create Account</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {!isLiving && (
                 <div className="space-y-1">
                   <Input
                     type="date"
-                    label="Date of Death (Optional for historical ancestors)"
+                    label="Date of Death (Compulsory for deceased relative)"
                     value={deathDate}
                     onChange={(e) => setDeathDate(e.target.value)}
                   />
-                  <p className="text-[10.5px] text-[#64748B]">
-                    Registered user accounts are not required for deceased historical ancestors.
-                  </p>
                 </div>
               )}
             </div>

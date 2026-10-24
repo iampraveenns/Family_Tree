@@ -206,6 +206,24 @@ export class MemoryService {
       );
     }
 
+    // Send notification alerting all family members of new memory
+    try {
+      const { notificationService } = await import('./notificationService.ts');
+      const authorLabel = authorMemberName || 'A family member';
+      await notificationService.notifyFamily({
+        familyId,
+        type: 'MEMORY_ADDED',
+        title: 'New Memory Shared',
+        message: `${authorLabel} shared a new memory: "${memory.title}"`,
+        entityType: 'Memory',
+        entityId: memory._id.toString(),
+        actorUserId: actorUserId,
+        actorName: authorLabel,
+      });
+    } catch (notifErr) {
+      console.warn('Could not dispatch memory notification:', notifErr);
+    }
+
     return memory;
   }
 

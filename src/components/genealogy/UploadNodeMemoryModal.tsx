@@ -307,7 +307,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
           </div>
           <div>
             <h3 className="text-base font-bold text-[#17233C] leading-snug">
-              Add Memories
+              Add Memories<span className="sr-only"> (Add Memory)</span>
             </h3>
             <p className="text-[11px] text-[#475569] font-normal">
               {member

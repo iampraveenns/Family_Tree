@@ -13,18 +13,8 @@ async function bootstrap() {
   // Attempt database connection
   await database.connect();
 
-  // Ensure default seed data exists in database
-  try {
-    const { Family } = await import('./server/src/models/Family.ts');
-    const familyCount = await Family.countDocuments();
-    if (familyCount === 0) {
-      logger.info('No family vaults detected in database. Seeding initial Pattara Family heritage vault...');
-      const { runSeed } = await import('./server/src/scripts/seed.ts');
-      await runSeed();
-    }
-  } catch (seedErr) {
-    logger.warn({ seedErr }, 'Initial database seed check encountered an issue, proceeding...');
-  }
+  // Dynamic data architecture: Family trees build dynamically from real user accounts.
+  logger.info('Dynamic data architecture active: No hardcoded trees seeded.');
 
   // Clear memory posts to ensure initial memories count is 0 as requested
   try {

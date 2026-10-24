@@ -11,6 +11,7 @@ export interface ServiceContext {
   userId?: string;
   role?: string;
   permissions?: string[];
+  userName?: string;
 }
 
 export class FamilyService {

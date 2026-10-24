@@ -10,7 +10,7 @@ import {
   ValidationError,
   NotFoundError,
 } from '../utils/errors.ts';
-import { AuditAction, UserStatus, ErrorCode } from '../constants/index.ts';
+import { AuditAction, UserStatus, ErrorCode, Role, DEFAULT_ROLE_PERMISSIONS } from '../constants/index.ts';
 import { logger } from '../utils/logger.ts';
 
 export class AuthService {
@@ -67,6 +67,93 @@ export class AuthService {
       user._id.toString(),
       { email: user.email }
     );
+
+    // Dynamic family vault and account-to-node linking
+    try {
+      const { Family } = await import('../models/Family.ts');
+      const { FamilyMember } = await import('../models/FamilyMember.ts');
+      const { FamilyMembership } = await import('../models/FamilyMembership.ts');
+
+      let family = await Family.findOne({});
+      if (!family) {
+        // First registered user establishes their family vault
+        family = await Family.create({
+          name: `${data.name.trim()}'s Family`,
+          description: `Family tree established by ${data.name.trim()}`,
+          originPlace: '',
+          motto: 'Roots in the Earth, Branches to the Sky',
+          createdBy: user._id,
+          settings: {
+            defaultMemberVisibility: 'FAMILY',
+            allowMemberInvitations: true,
+            allowPublicProfiles: false,
+            timezone: 'UTC',
+            dateFormat: 'YYYY-MM-DD',
+          },
+        });
+
+        const nameParts = data.name.trim().split(' ');
+        const firstName = nameParts[0] || 'User';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        // Create root member node linked directly to this account
+        const member = await FamilyMember.create({
+          familyId: family._id,
+          firstName,
+          lastName,
+          displayName: data.name.trim(),
+          gender: 'OTHER',
+          isLiving: true,
+          linkedUserId: user._id,
+          generation: 1,
+          createdBy: user._id,
+        });
+
+        // Create ADMIN membership mapped directly to member node
+        await FamilyMembership.create({
+          userId: user._id,
+          familyId: family._id,
+          memberId: member._id,
+          role: Role.ADMIN,
+          status: 'ACTIVE',
+          permissions: DEFAULT_ROLE_PERMISSIONS[Role.ADMIN],
+        });
+      } else {
+        // Family already exists: check if there is an unlinked member node matching this user's email or name
+        const matchedMember = await FamilyMember.findOne({
+          familyId: family._id,
+          $or: [
+            { linkedUserId: user._id },
+            { registeredEmail: email },
+            { email },
+          ],
+        });
+
+        let memberId = matchedMember ? matchedMember._id : undefined;
+        if (matchedMember && !matchedMember.linkedUserId) {
+          matchedMember.linkedUserId = user._id;
+          await matchedMember.save();
+        }
+
+        const existingMembership = await FamilyMembership.findOne({
+          userId: user._id,
+          familyId: family._id,
+        });
+
+        if (!existingMembership) {
+          await FamilyMembership.create({
+            userId: user._id,
+            familyId: family._id,
+            memberId,
+            role: Role.VIEWER,
+            status: 'ACTIVE',
+            permissions: DEFAULT_ROLE_PERMISSIONS[Role.VIEWER],
+          });
+        }
+      }
+    } catch (linkErr) {
+      logger.warn({ linkErr }, 'Dynamic family or node linking note during registration');
+    }
 
     return {
       user: {
@@ -268,6 +355,59 @@ export class AuthService {
       },
       memberships,
     };
+  }
+
+  /**
+   * Ensures that the requested demo user (Admin or Viewer) exists with appropriate credentials and active family membership.
+   */
+  async ensureDemoUser(role: Role = Role.ADMIN): Promise<{ email: string }> {
+    const isViewer = role === Role.VIEWER;
+    const email = isViewer ? 'viewer@familyroots.heritage' : 'dev@familyroots.heritage';
+    const displayName = isViewer ? 'Aarav Pattara (Viewer)' : 'Kiran Pattara (Admin)';
+    const avatar = isViewer
+      ? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'
+      : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
+
+    let user = await userRepository.findByEmail(email);
+    if (!user) {
+      const passwordHash = await SecurityUtils.hashPassword('FamilyRoots#2026');
+      user = await userRepository.create({
+        email,
+        passwordHash,
+        displayName,
+        avatar,
+        status: UserStatus.ACTIVE,
+      });
+    }
+
+    // Ensure family membership in the primary family vault
+    const { Family } = await import('../models/Family.ts');
+    const { FamilyMembership } = await import('../models/FamilyMembership.ts');
+    const family = (await Family.findOne({ name: 'Pattara Family' })) || (await Family.findOne({}));
+    if (family) {
+      let membership = await FamilyMembership.findOne({
+        userId: user._id,
+        familyId: family._id,
+      });
+      const targetRole = isViewer ? Role.VIEWER : Role.ADMIN;
+      const targetPermissions = DEFAULT_ROLE_PERMISSIONS[targetRole] || [];
+
+      if (!membership) {
+        await FamilyMembership.create({
+          userId: user._id,
+          familyId: family._id,
+          role: targetRole,
+          status: 'ACTIVE',
+          permissions: targetPermissions,
+        });
+      } else if (membership.role !== targetRole) {
+        membership.role = targetRole;
+        membership.permissions = targetPermissions;
+        await membership.save();
+      }
+    }
+
+    return { email };
   }
 }
 

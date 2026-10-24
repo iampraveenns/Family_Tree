@@ -28,6 +28,11 @@ import {
   Camera,
   Upload,
   Pencil,
+  ShieldCheck,
+  Eye,
+  Info,
+  CheckCircle2,
+  Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFamilyStore } from '../../stores/useFamilyStore.ts';
@@ -42,7 +47,7 @@ import { Button } from '../../components/ui/Button.tsx';
 import { Modal } from '../../components/ui/Modal.tsx';
 import { Input } from '../../components/ui/Input.tsx';
 import { EmptyState } from '../../components/ui/EmptyState.tsx';
-import { authenticatedFetch } from '../../utils/api.ts';
+import { authenticatedFetch, setRoleSession, SELECTED_ROLE_KEY } from '../../utils/api.ts';
 
 import { HeritageMemberNode, getNodeDateRows, formatSingleDate } from '../../components/genealogy/HeritageMemberNode.tsx';
 import { CoupleJunctionNode, formatMarriageDate } from '../../components/genealogy/CoupleJunctionNode.tsx';
@@ -114,14 +119,41 @@ const FamilyTreeInner: React.FC = () => {
     }
   }, [currentFamily?.id, fetchFamilyTree, fetchPermissions, memories.length, events.length]);
 
+  const [isAuthoritiesModalOpen, setIsAuthoritiesModalOpen] = useState(false);
+  const [isSwitchingRole, setIsSwitchingRole] = useState(false);
+
   const isAdmin = useMemo(() => {
     if (!userPermissions) {
-      return true; // Fallback during initial load
+      const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(SELECTED_ROLE_KEY) : null;
+      if (stored === 'VIEWER') return false;
+      return true;
     }
     const role = userPermissions.role ? String(userPermissions.role).toUpperCase() : '';
     if (role === 'VIEWER') return false;
     return role === 'ADMIN' || userPermissions.capabilities?.canEditAllMembers === true;
   }, [userPermissions]);
+
+  const handleSwitchRole = async (targetRole: 'ADMIN' | 'VIEWER') => {
+    setIsSwitchingRole(true);
+    try {
+      await setRoleSession(targetRole);
+      const famId = currentFamily?.id || activeFamilyId;
+      if (famId) {
+        await fetchPermissions(famId);
+      }
+      await fetchFamilyTree();
+      success(
+        targetRole === 'ADMIN'
+          ? 'Switched to Family Admin: All editing and management options are now visible.'
+          : 'Switched to Family Viewer: Read-only tree active with defined view authorities.',
+        targetRole === 'ADMIN' ? 'Admin Mode Active' : 'Viewer Mode Active'
+      );
+    } catch {
+      toastError('Could not switch role. Please try again.');
+    } finally {
+      setIsSwitchingRole(false);
+    }
+  };
 
   const containerRef = useRef<HTMLDivElement>(null);
   const branchScrollRef = useRef<HTMLDivElement>(null);
@@ -1623,12 +1655,12 @@ const FamilyTreeInner: React.FC = () => {
             )}
           </div>
 
-          {/* Add Relative / Root Ancestor Button (Admin Only) */}
-          {isAdmin && (
+          {/* Role-Specific Actions: All Options for Admin, View Authorities for Viewer */}
+          {isAdmin ? (
             <Button
               size="sm"
               leftIcon={<Plus className="w-3.5 h-3.5" />}
-              className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-xs"
+              className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-xs font-semibold"
               onClick={async () => {
                 let famId = currentFamily?.id || activeFamilyId || useFamilyStore.getState().activeFamilyId;
                 if (!famId && availableFamilies.length > 0) {
@@ -1651,7 +1683,49 @@ const FamilyTreeInner: React.FC = () => {
             >
               {members.length === 0 ? 'Add Root Ancestor' : 'Add Relative'}
             </Button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsAuthoritiesModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-300 text-xs font-bold text-[#0284C7] shadow-2xs transition-all cursor-pointer"
+              title="Click to view full Viewer authorities & permissions"
+            >
+              <Eye className="w-3.5 h-3.5 text-[#0284C7]" />
+              <span>View Authorities</span>
+            </button>
           )}
+
+          {/* Quick Role Switcher (Admin vs Viewer) */}
+          <div className="flex items-center rounded-xl bg-[#F1F5F9] p-0.5 border border-[#CBD5E1] text-xs">
+            <button
+              type="button"
+              disabled={isSwitchingRole}
+              onClick={() => handleSwitchRole('ADMIN')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                isAdmin
+                  ? 'bg-[#2563EB] text-white shadow-2xs'
+                  : 'text-[#64748B] hover:text-[#0F172A]'
+              }`}
+              title="Switch to Admin (Shows all tree editing options)"
+            >
+              <ShieldCheck className="w-3 h-3" />
+              <span>Admin</span>
+            </button>
+            <button
+              type="button"
+              disabled={isSwitchingRole}
+              onClick={() => handleSwitchRole('VIEWER')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                !isAdmin
+                  ? 'bg-[#0284C7] text-white shadow-2xs'
+                  : 'text-[#64748B] hover:text-[#0F172A]'
+              }`}
+              title="Switch to Viewer (Shows view authorities)"
+            >
+              <Eye className="w-3 h-3" />
+              <span>Viewer</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2684,6 +2758,122 @@ const FamilyTreeInner: React.FC = () => {
           }}
         />
       )}
+
+      {/* Phase 53: Viewer Authorities Breakdown Modal */}
+      <Modal
+        isOpen={isAuthoritiesModalOpen}
+        onClose={() => setIsAuthoritiesModalOpen(false)}
+        maxWidth="md"
+        title={
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-sky-100 text-[#0284C7] flex items-center justify-center shrink-0">
+              <Eye className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-[#0F172A] leading-snug">
+                Family Viewer Authorities
+              </h3>
+              <p className="text-[11px] text-[#475569] font-normal">
+                Transparent breakdown of your access authorities vs. Admin capabilities
+              </p>
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-4 pt-1">
+          {/* Active Role Card */}
+          <div className="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200 flex items-start gap-3">
+            <div className="w-7 h-7 rounded-lg bg-sky-200 text-[#0284C7] flex items-center justify-center shrink-0 mt-0.5">
+              <Eye className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-[#0F172A]">Active Role: Family Viewer</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-[#0284C7]">
+                  Read-Only Tree
+                </span>
+              </div>
+              <p className="text-[11px] text-[#475569] mt-0.5">
+                You have view authorities across all branches, kinship paths, and member stories, and can contribute memories to the heritage vault.
+              </p>
+            </div>
+          </div>
+
+          {/* Authorities List (Allowed) */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold text-emerald-800 flex items-center gap-1.5 uppercase tracking-wider">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Your View Authorities (Allowed)</span>
+            </h4>
+            <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-1.5 text-xs text-emerald-950">
+              <div className="flex items-start gap-2">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <span><strong>Interactive Tree Canvas:</strong> Pan, zoom, generation alignment, and spouse linkages</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <span><strong>Kinship Calculator:</strong> Calculate exact biological or adoptive kinship paths</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <span><strong>Relative Profiles & Stories:</strong> View birth/death dates, places, occupations, and bios</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <span><strong>Viewing Tools:</strong> Search relatives, branch filters, Fit Family, Focus Mode, Fullscreen & Map</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <span><strong>Memory Contributions:</strong> Upload and tag photos, videos, audios, and memories in the vault</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Prohibited / Admin-Only Actions */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wider">
+              <Lock className="w-3.5 h-3.5 text-slate-500" />
+              <span>Admin-Only Operations (Hidden / Disabled for Viewer)</span>
+            </h4>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 text-xs text-slate-600">
+              <div className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0 mt-1.5" />
+                <span><strong>+ Add Relative:</strong> Only the sole Family Admin can create tree member nodes</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0 mt-1.5" />
+                <span><strong>+ Child & + Spouse:</strong> Card and drawer mutation buttons are hidden for viewers</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0 mt-1.5" />
+                <span><strong>Profile & Relationship Edits:</strong> Editing names, marriage dates, life status, or deleting records is prohibited</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="pt-2 flex items-center justify-between border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => setIsAuthoritiesModalOpen(false)}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAuthoritiesModalOpen(false);
+                handleSwitchRole('ADMIN');
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Switch to Admin Mode (Enable All Options)</span>
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

@@ -50,6 +50,29 @@ export function clearAuthTokens(): void {
 
 let authSessionPromise: Promise<string | null> | null = null;
 
+export const SELECTED_ROLE_KEY = 'familyroots_selected_role';
+
+/**
+ * Switch active role session to Admin or Viewer and update tokens.
+ */
+export async function setRoleSession(role: 'ADMIN' | 'VIEWER'): Promise<boolean> {
+  localStorage.setItem(SELECTED_ROLE_KEY, role);
+  clearAuthTokens();
+  try {
+    const res = await fetch(`/api/auth/demo-session?role=${role.toLowerCase()}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.data?.accessToken) {
+        setAuthTokens(json.data.accessToken, json.data.refreshToken);
+        return true;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to set role session:', err);
+  }
+  return false;
+}
+
 /**
  * Ensures a valid session token exists. Attempts silent refresh if a refresh token is stored.
  */
@@ -87,9 +110,10 @@ export async function ensureAuthSession(forceRefresh = false): Promise<string | 
         }
       }
 
-      // If no valid tokens exist, initialize demo session
+      // If no valid tokens exist, initialize session based on selected role
       try {
-        const demoRes = await fetch('/api/auth/demo-session');
+        const preferredRole = localStorage.getItem(SELECTED_ROLE_KEY) || 'ADMIN';
+        const demoRes = await fetch(`/api/auth/demo-session?role=${preferredRole.toLowerCase()}`);
         if (demoRes.ok) {
           const demoJson = await demoRes.json();
           if (demoJson.success && demoJson.data?.accessToken) {

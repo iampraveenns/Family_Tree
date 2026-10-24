@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/authService.ts';
 import { sendSuccess } from '../utils/apiResponse.ts';
+import { Role } from '../constants/index.ts';
 
 export class AuthController {
   async register(req: Request, res: Response, next: NextFunction) {
@@ -66,13 +67,20 @@ export class AuthController {
     try {
       const ip = req.ip || req.socket.remoteAddress;
       const userAgent = req.get('user-agent');
+      const requestedRole = ((req.query.role as string) || req.body?.role || 'ADMIN').toUpperCase();
+      const isViewer = requestedRole === 'VIEWER';
+      const role = isViewer ? Role.VIEWER : Role.ADMIN;
+
+      const { email } = await authService.ensureDemoUser(role);
+
       const result = await authService.login({
-        email: 'dev@familyroots.heritage',
+        email,
         password: 'FamilyRoots#2026',
         ip,
         userAgent,
       });
-      sendSuccess(res, result, 'Demo session initialized');
+
+      sendSuccess(res, { ...result, role }, `${isViewer ? 'Viewer' : 'Admin'} demo session initialized`);
     } catch (error) {
       next(error);
     }

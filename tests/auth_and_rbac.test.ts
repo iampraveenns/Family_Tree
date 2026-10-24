@@ -160,7 +160,7 @@ describe('Authentication, RBAC & Membership Management Engine', () => {
     });
   });
 
-  describe('3. Invitation Flow & Multirole Provisioning', () => {
+  describe('3. Invitation Flow & Single Admin Constraint', () => {
     let inviteTokenForAdmin: string;
     let inviteTokenForParentManager: string;
     let inviteTokenForMember: string;
@@ -192,72 +192,85 @@ describe('Authentication, RBAC & Membership Management Engine', () => {
       memberUserId = rMember.body.data.user.id;
     });
 
-    it('creates invitations for family members with specific roles', async () => {
-      // 1. Invite Admin
+    it('enforces Single Admin Constraint: rejects inviting additional users as ADMIN', async () => {
+      const invAdminFail = await request(app)
+        .post(`/api/families/${familyId}/memberships/invitations`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          email: 'admin@familyroots.org',
+          role: Role.ADMIN,
+        });
+
+      expect(invAdminFail.status).toBe(400);
+      expect(invAdminFail.body.error.message).toMatch(/only one ADMIN/i);
+    });
+
+    it('creates invitations for family members with VIEWER role', async () => {
+      // 1. Invite User 1 (Admin User as Viewer)
       const invAdmin = await request(app)
         .post(`/api/families/${familyId}/memberships/invitations`)
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
           email: 'admin@familyroots.org',
-          role: Role.FAMILY_ADMIN,
+          role: Role.VIEWER,
         });
 
       expect(invAdmin.status).toBe(201);
       expect(invAdmin.body.data.rawToken).toBeDefined();
       inviteTokenForAdmin = invAdmin.body.data.rawToken;
 
-      // 2. Invite Parent Manager
+      // 2. Invite User 2 (Parent Manager as Viewer)
       const invPM = await request(app)
         .post(`/api/families/${familyId}/memberships/invitations`)
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
           email: 'parentmgr@familyroots.org',
-          role: Role.PARENT_MANAGER,
+          role: Role.VIEWER,
         });
 
       expect(invPM.status).toBe(201);
       inviteTokenForParentManager = invPM.body.data.rawToken;
 
-      // 3. Invite Member
+      // 3. Invite User 3 (Member as Viewer)
       const invMember = await request(app)
         .post(`/api/families/${familyId}/memberships/invitations`)
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
           email: 'member@familyroots.org',
-          role: Role.MEMBER,
+          role: Role.VIEWER,
         });
 
       expect(invMember.status).toBe(201);
       inviteTokenForMember = invMember.body.data.rawToken;
     });
 
-    it('accepts invitations and provisions active memberships with corresponding roles', async () => {
-      // Admin accepts
+    it('accepts invitations and provisions active memberships as VIEWER', async () => {
+      // User 1 accepts
       const accAdmin = await request(app)
         .post('/api/families/invitations/accept')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ token: inviteTokenForAdmin });
 
       expect(accAdmin.status).toBe(200);
-      expect(accAdmin.body.data.role).toBe(Role.FAMILY_ADMIN);
+      expect(accAdmin.body.data.role).toBe(Role.VIEWER);
 
-      // Parent Manager accepts
+      // User 2 accepts
       const accPM = await request(app)
         .post('/api/families/invitations/accept')
         .set('Authorization', `Bearer ${parentManagerToken}`)
         .send({ token: inviteTokenForParentManager });
 
       expect(accPM.status).toBe(200);
-      expect(accPM.body.data.role).toBe(Role.PARENT_MANAGER);
+      expect(accPM.body.data.role).toBe(Role.VIEWER);
 
-      // Member accepts
+      // User 3 accepts
       const accMem = await request(app)
         .post('/api/families/invitations/accept')
         .set('Authorization', `Bearer ${memberToken}`)
         .send({ token: inviteTokenForMember });
 
       expect(accMem.status).toBe(200);
-      expect(accMem.body.data.role).toBe(Role.MEMBER);
+      expect(accMem.body.data.role).toBe(Role.VIEWER);
     });
 
     it('rejects reusing an already accepted invitation token', async () => {
@@ -270,7 +283,7 @@ describe('Authentication, RBAC & Membership Management Engine', () => {
     });
   });
 
-  describe('4. Role Hierarchy & Role Mutation Protections', () => {
+  describe('4. Role Hierarchy, Single Admin Ownership Transfer & Role Protections', () => {
     let memberMembershipId: string;
     let ownerMembershipId: string;
     let adminMembershipId: string;
@@ -281,9 +294,9 @@ describe('Authentication, RBAC & Membership Management Engine', () => {
         .set('Authorization', `Bearer ${ownerToken}`);
 
       const memberships = memRes.body.data;
-      const ownerMem = memberships.find((m: { role: string }) => m.role === Role.FAMILY_OWNER);
-      const adminMem = memberships.find((m: { role: string }) => m.role === Role.FAMILY_ADMIN);
-      const regMem = memberships.find((m: { role: string }) => m.role === Role.MEMBER);
+      const ownerMem = memberships.find((m: any) => m.userId?._id === ownerUserId || m.userId === ownerUserId);
+      const adminMem = memberships.find((m: any) => m.userId?._id === adminUserId || m.userId === adminUserId);
+      const regMem = memberships.find((m: any) => m.userId?._id === memberUserId || m.userId === memberUserId);
 
       ownerMembershipId = ownerMem._id;
       adminMembershipId = adminMem._id;
@@ -292,60 +305,120 @@ describe('Authentication, RBAC & Membership Management Engine', () => {
 
     it('strictly prohibits self-escalation (user cannot change own role)', async () => {
       const res = await request(app)
-        .patch(`/api/families/${familyId}/memberships/${adminMembershipId}/role`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ role: Role.FAMILY_OWNER });
+        .patch(`/api/families/${familyId}/memberships/${ownerMembershipId}/role`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ role: Role.ADMIN });
 
       expect(res.status).toBe(403);
       expect(res.body.error.message).toMatch(/strictly prohibited from modifying their own role/i);
     });
 
-    it('prohibits demoting or removing the final FAMILY_OWNER', async () => {
+    it('prohibits VIEWER from modifying roles or promoting others', async () => {
+      const res = await request(app)
+        .patch(`/api/families/${familyId}/memberships/${memberMembershipId}/role`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ role: Role.ADMIN });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.message).toMatch(/(Only the Family ADMIN can manage roles|lacks MANAGE_ROLES capability)/i);
+    });
+
+    it('prohibits demoting the sole ADMIN without transferring ownership first', async () => {
       const res = await request(app)
         .patch(`/api/families/${familyId}/memberships/${ownerMembershipId}/role`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ role: Role.MEMBER });
-
-      expect(res.status).toBe(403);
-    });
-
-    it('prohibits admin from promoting someone to FAMILY_OWNER (only owner can appoint owner)', async () => {
-      const res = await request(app)
-        .patch(`/api/families/${familyId}/memberships/${memberMembershipId}/role`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ role: Role.FAMILY_OWNER });
-
-      expect(res.status).toBe(403);
-      expect(res.body.error.message).toMatch(/Cannot grant a role \(FAMILY_OWNER\) equal to or higher than actor's role/i);
-    });
-
-    it('allows FAMILY_OWNER to promote member to CONTRIBUTOR', async () => {
-      const res = await request(app)
-        .patch(`/api/families/${familyId}/memberships/${memberMembershipId}/role`)
         .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ role: Role.CONTRIBUTOR });
+        .send({ role: Role.VIEWER });
+
+      // Owner cannot demote self per self-escalation/modification rule
+      expect(res.status).toBe(403);
+    });
+
+    it('transfers sole ADMIN ownership to another user, demoting previous admin to VIEWER', async () => {
+      // Owner promotes adminMembership to ADMIN -> transfers ownership
+      const res = await request(app)
+        .patch(`/api/families/${familyId}/memberships/${adminMembershipId}/role`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ role: Role.ADMIN });
 
       expect(res.status).toBe(200);
-      expect(res.body.data.role).toBe(Role.CONTRIBUTOR);
+      expect(res.body.data.role).toBe(Role.ADMIN);
+
+      // Verify previous owner is now demoted to VIEWER
+      const verifyRes = await request(app)
+        .get(`/api/families/${familyId}/memberships`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const memberships = verifyRes.body.data;
+      const prevOwnerMem = memberships.find((m: any) => m._id === ownerMembershipId);
+      const newAdminMem = memberships.find((m: any) => m._id === adminMembershipId);
+
+      expect(prevOwnerMem.role).toBe(Role.VIEWER);
+      expect(newAdminMem.role).toBe(Role.ADMIN);
+
+      // Transfer ownership back to ownerUser for subsequent test steps
+      const returnRes = await request(app)
+        .patch(`/api/families/${familyId}/memberships/${ownerMembershipId}/role`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ role: Role.ADMIN });
+
+      expect(returnRes.status).toBe(200);
+      expect(returnRes.body.data.role).toBe(Role.ADMIN);
     });
   });
 
-  describe('5. Scoped Authorization & BFS Descendant Traversal for PARENT_MANAGER', () => {
-    let parentManagerMembershipId: string;
+  describe('5. Registered Account Requirement & Permission Matrix Enforcement', () => {
+    it('blocks creating a living member without a registered account (Rule 3)', async () => {
+      const res = await request(app)
+        .post(`/api/families/${familyId}/members`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          firstName: 'Unregistered',
+          lastName: 'Person',
+          gender: 'MALE',
+          isLiving: true,
+          dateOfBirth: '1995-05-15',
+        });
 
-    beforeAll(async () => {
-      // 1. Create family tree hierarchy: Root Grandparent -> Parent -> Child
-      const r1 = await request(app)
+      expect(res.status).toBe(400);
+      expect(res.body.error.message).toBe('Cannot create member node: This person must have a registered account first.');
+    });
+
+    it('blocks creating a living member with an unknown non-existent email', async () => {
+      const res = await request(app)
+        .post(`/api/families/${familyId}/members`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          firstName: 'Ghost',
+          lastName: 'User',
+          gender: 'FEMALE',
+          isLiving: true,
+          registeredEmail: 'nonexistent_account@ghost.org',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.message).toBe('Cannot create member node: This person must have a registered account first.');
+    });
+
+    it('allows creating deceased historical ancestors without a registered account', async () => {
+      const res = await request(app)
         .post(`/api/families/${familyId}/members`)
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
           firstName: 'Grandfather',
           lastName: 'Somerset',
           gender: 'MALE',
-          dateOfBirth: '1930-01-01',
+          isLiving: false,
+          dateOfBirth: '1925-01-01',
+          dateOfDeath: '1995-10-12',
         });
-      rootGrandparentMemberId = r1.body.data._id;
 
+      expect(res.status).toBe(201);
+      expect(res.body.data._id).toBeDefined();
+      rootGrandparentMemberId = res.body.data._id;
+    });
+
+    it('allows creating living members when linked to a verified registered user account', async () => {
+      // 1. Parent linked to parentmgr@familyroots.org
       const r2 = await request(app)
         .post(`/api/families/${familyId}/members`)
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -354,9 +427,15 @@ describe('Authentication, RBAC & Membership Management Engine', () => {
           lastName: 'Somerset',
           gender: 'MALE',
           dateOfBirth: '1960-01-01',
+          isLiving: true,
+          registeredEmail: 'parentmgr@familyroots.org',
         });
+
+      expect(r2.status).toBe(201);
+      expect(r2.body.data.linkedUserId).toBe(parentManagerUserId);
       parentMemberId = r2.body.data._id;
 
+      // 2. Child linked to member@familyroots.org
       const r3 = await request(app)
         .post(`/api/families/${familyId}/members`)
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -365,25 +444,44 @@ describe('Authentication, RBAC & Membership Management Engine', () => {
           lastName: 'Somerset',
           gender: 'FEMALE',
           dateOfBirth: '1990-01-01',
+          isLiving: true,
+          registeredEmail: 'member@familyroots.org',
         });
+
+      expect(r3.status).toBe(201);
+      expect(r3.body.data.linkedUserId).toBe(memberUserId);
       childMemberId = r3.body.data._id;
 
-      const r4 = await request(app)
-        .post(`/api/families/${familyId}/members`)
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .send({
-          firstName: 'Unrelated',
-          lastName: 'Stranger',
-          gender: 'OTHER',
-          dateOfBirth: '1970-01-01',
-        });
-      unrelatedMemberId = r4.body.data._id;
-
-      // Spouses for Grandparent and Parent (Required by Phase 33 to have children)
+      // 3. Spouse for Grandfather (deceased ancestor)
       const rSpouse1 = await request(app)
         .post(`/api/families/${familyId}/members`)
         .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ firstName: 'Grandmother', lastName: 'Somerset', gender: 'FEMALE', dateOfBirth: '1942-01-01' });
+        .send({
+          firstName: 'Grandmother',
+          lastName: 'Somerset',
+          gender: 'FEMALE',
+          isLiving: false,
+          dateOfBirth: '1928-01-01',
+          dateOfDeath: '1998-05-15',
+        });
+
+      expect(rSpouse1.status).toBe(201);
+
+      // 4. Spouse for Parent (living, linked to admin@familyroots.org)
+      const rSpouse2 = await request(app)
+        .post(`/api/families/${familyId}/members`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          firstName: 'OtherParent',
+          lastName: 'Somerset',
+          gender: 'FEMALE',
+          isLiving: true,
+          registeredEmail: 'admin@familyroots.org',
+        });
+
+      expect(rSpouse2.status).toBe(201);
+
+      // Create tree relationships
       await request(app)
         .post(`/api/families/${familyId}/relationships`)
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -393,10 +491,6 @@ describe('Authentication, RBAC & Membership Management Engine', () => {
           relationshipType: RelationshipType.SPOUSE,
         });
 
-      const rSpouse2 = await request(app)
-        .post(`/api/families/${familyId}/members`)
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ firstName: 'OtherParent', lastName: 'Somerset', gender: 'MALE', dateOfBirth: '1966-01-01' });
       await request(app)
         .post(`/api/families/${familyId}/relationships`)
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -406,8 +500,6 @@ describe('Authentication, RBAC & Membership Management Engine', () => {
           relationshipType: RelationshipType.SPOUSE,
         });
 
-      // Relationships:
-      // Grandfather PARENT of Parent
       await request(app)
         .post(`/api/families/${familyId}/relationships`)
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -417,7 +509,6 @@ describe('Authentication, RBAC & Membership Management Engine', () => {
           relationshipType: RelationshipType.PARENT,
         });
 
-      // Parent PARENT of Child
       await request(app)
         .post(`/api/families/${familyId}/relationships`)
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -426,68 +517,62 @@ describe('Authentication, RBAC & Membership Management Engine', () => {
           targetMemberId: childMemberId,
           relationshipType: RelationshipType.PARENT,
         });
-
-      // Link Parent Manager's membership to the "Parent" member node
-      const memRes = await request(app)
-        .get(`/api/families/${familyId}/memberships`)
-        .set('Authorization', `Bearer ${ownerToken}`);
-
-      const pmMem = memRes.body.data.find((m: { role: string }) => m.role === Role.PARENT_MANAGER);
-      parentManagerMembershipId = pmMem._id;
-
-      // Update membership with memberId link
-      const { FamilyMembership } = await import('../server/src/models/FamilyMembership.ts');
-      await FamilyMembership.findByIdAndUpdate(parentManagerMembershipId, {
-        memberId: parentMemberId,
-      });
     });
 
-    it('verifies that PARENT_MANAGER can manage their verified descendant (Child)', async () => {
-      const { authorizationService } = await import('../server/src/services/authorizationService.ts');
-      const { Permission } = await import('../server/src/constants/index.ts');
+    it('prohibits VIEWER from creating or modifying tree member nodes', async () => {
+      const res = await request(app)
+        .post(`/api/families/${familyId}/members`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({
+          firstName: 'Unauthorized',
+          lastName: 'Member',
+          isLiving: false,
+        });
 
-      const check = await authorizationService.canManageMember(
-        parentManagerUserId,
-        familyId,
-        childMemberId,
-        Permission.EDIT_MEMBER
-      );
-
-      expect(check.allowed).toBe(true);
+      expect(res.status).toBe(403);
     });
 
-    it('verifies that PARENT_MANAGER CANNOT manage their ancestor (Grandfather)', async () => {
-      const { authorizationService } = await import('../server/src/services/authorizationService.ts');
-      const { Permission } = await import('../server/src/constants/index.ts');
+    it('prohibits VIEWER from mutating relationships in the tree', async () => {
+      const res = await request(app)
+        .post(`/api/families/${familyId}/relationships`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({
+          sourceMemberId: rootGrandparentMemberId,
+          targetMemberId: childMemberId,
+          relationshipType: RelationshipType.PARENT,
+        });
 
-      const check = await authorizationService.canManageMember(
-        parentManagerUserId,
-        familyId,
-        rootGrandparentMemberId,
-        Permission.EDIT_MEMBER
-      );
-
-      expect(check.allowed).toBe(false);
-      expect(check.reason).toMatch(/verified descendants/i);
+      expect(res.status).toBe(403);
     });
 
-    it('verifies that PARENT_MANAGER CANNOT manage an unrelated member', async () => {
-      const { authorizationService } = await import('../server/src/services/authorizationService.ts');
-      const { Permission } = await import('../server/src/constants/index.ts');
+    it('allows VIEWER to view tree members (Read-Only access)', async () => {
+      const res = await request(app)
+        .get(`/api/families/${familyId}/members`)
+        .set('Authorization', `Bearer ${memberToken}`);
 
-      const check = await authorizationService.canManageMember(
-        parentManagerUserId,
-        familyId,
-        unrelatedMemberId,
-        Permission.EDIT_MEMBER
-      );
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBeGreaterThan(0);
+    });
 
-      expect(check.allowed).toBe(false);
+    it('allows VIEWER to contribute and upload new memories', async () => {
+      const res = await request(app)
+        .post(`/api/memories`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({
+          familyId,
+          title: 'A Beautiful Family Reunion Memory',
+          description: 'Uploaded by viewer to celebrate heritage',
+          memberIds: [childMemberId],
+        });
+
+      expect([200, 201]).toContain(res.status);
+      expect(res.body.success).toBe(true);
     });
   });
 
   describe('6. Audit Logging & Compliance Trail', () => {
-    it('retrieves recorded audit trail entries for the family', async () => {
+    it('retrieves recorded audit trail entries for the family as ADMIN', async () => {
       const res = await request(app)
         .get(`/api/families/${familyId}/memberships/audit-logs/all`)
         .set('Authorization', `Bearer ${ownerToken}`);
@@ -497,12 +582,12 @@ describe('Authentication, RBAC & Membership Management Engine', () => {
       expect(Array.isArray(res.body.data)).toBe(true);
       expect(res.body.data.length).toBeGreaterThan(0);
 
-      // Verify that sensitive actions like ROLE_CHANGED or MEMBER_CREATED are recorded
+      // Verify that sensitive actions like ROLE_CHANGED are recorded
       const actions = res.body.data.map((log: { action: string }) => log.action);
       expect(actions).toContain('ROLE_CHANGED');
     });
 
-    it('prohibits standard members without VIEW_AUDIT_LOG from accessing audit trail', async () => {
+    it('prohibits standard VIEWER without VIEW_AUDIT_LOG from accessing audit trail', async () => {
       const res = await request(app)
         .get(`/api/families/${familyId}/memberships/audit-logs/all`)
         .set('Authorization', `Bearer ${memberToken}`);

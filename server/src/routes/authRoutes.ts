@@ -9,6 +9,7 @@ const router = Router();
 router.post('/register', authLimiter, (req, res, next) => authController.register(req, res, next));
 router.post('/login', authLimiter, (req, res, next) => authController.login(req, res, next));
 router.get('/demo-session', (req, res, next) => authController.getDemoSession(req, res, next));
+router.post('/demo-session', (req, res, next) => authController.getDemoSession(req, res, next));
 router.post('/refresh', authLimiter, (req, res, next) => authController.refresh(req, res, next));
 router.post('/logout', authenticate, (req, res, next) => authController.logout(req, res, next));
 router.get('/me', authenticate, requireAuthentication, (req, res, next) => authController.getMe(req, res, next));

@@ -456,7 +456,9 @@ export interface NotificationItem {
     | 'CONTRIBUTION_REJECTED'
     | 'RELATIONSHIP_UPDATED'
     | 'MILESTONE_ALERT'
-    | 'NEW_CONTRIBUTION';
+    | 'NEW_CONTRIBUTION'
+    | 'MEMBER_ADDED'
+    | 'MEMORY_ADDED';
   title: string;
   message: string;
   entityType?: string;

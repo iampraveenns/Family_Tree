@@ -117,9 +117,10 @@ export class MemberService {
       data.branchIds = (await this.resolveAndValidateBranchIds(familyId, data.branchIds, undefined, context)) as any;
     }
 
-    // 3. Registered Account Verification Rule (Rule 3)
-    // A family member node can ONLY be created if that person already has a registered user account,
-    // unless they are marked as deceased / historical ancestor.
+    // 3. Registered Account Verification Rule
+    // Enforce strict rule: A person can only be added to or exist within the family tree
+    // if they have a registered account created via JSON authentication system.
+    // Link every account directly to its corresponding member node.
     const isDeceased = data.isLiving === false || Boolean(data.dateOfDeath && data.dateOfDeath.trim().length > 0);
     const rawAccountEmail = (data as any).registeredEmail || (data as any).email || (data as any).userEmail || (data as any).accountEmail;
     const accountEmail = typeof rawAccountEmail === 'string' ? rawAccountEmail.trim().toLowerCase() : undefined;
@@ -128,20 +129,35 @@ export class MemberService {
     let linkedUser: any = null;
     if (accountEmail) {
       linkedUser = await userRepository.findByEmail(accountEmail);
+      if (!linkedUser) {
+        throw new ValidationError(`Cannot create member node: No registered account found for "${accountEmail}". Every person must have a registered account created first.`);
+      }
     } else if (accountUserId && Types.ObjectId.isValid(accountUserId)) {
       linkedUser = await userRepository.findById(accountUserId);
+      if (!linkedUser) {
+        throw new ValidationError('Cannot create member node: The specified user account does not exist.');
+      }
+    } else {
+      const existingCount = await FamilyMember.countDocuments({ familyId: new Types.ObjectId(familyId) });
+      if (existingCount === 0 && context?.userId && Types.ObjectId.isValid(context.userId)) {
+        linkedUser = await userRepository.findById(context.userId);
+      }
+      if (!linkedUser) {
+        throw new ValidationError('Cannot create member node: A registered account email is required. Every person in the family tree must have a registered account.');
+      }
     }
 
-    if (!isDeceased) {
-      if (!linkedUser) {
-        throw new ValidationError('Cannot create member node: This person must have a registered account first.');
-      }
-      data.linkedUserId = linkedUser._id;
-    } else {
-      if (linkedUser) {
-        data.linkedUserId = linkedUser._id;
-      }
+    // Enforce universal 1:1 account-to-node mapping in the family tree
+    const existingNodeForUser = await FamilyMember.findOne({
+      familyId: new Types.ObjectId(familyId),
+      linkedUserId: linkedUser._id,
+    });
+    if (existingNodeForUser) {
+      throw new ValidationError(`The account "${linkedUser.email}" is already linked to member "${existingNodeForUser.displayName}" in this tree.`);
     }
+
+    data.linkedUserId = linkedUser._id;
+    data.registeredEmail = linkedUser.email;
 
     // 4. Normalize display name
     const firstName = data.firstName?.trim() || '';
@@ -155,7 +171,7 @@ export class MemberService {
       createdBy: context?.userId || 'system',
     });
 
-    // 5. Ensure the linked registered user is recorded in family memberships as VIEWER if not present
+    // 5. Ensure the linked registered user is recorded in family memberships and linked directly
     if (data.linkedUserId) {
       try {
         const existingMembership = await membershipRepository.findByUserAndFamily(data.linkedUserId, familyId);
@@ -168,13 +184,30 @@ export class MemberService {
             status: 'ACTIVE',
             permissions: DEFAULT_ROLE_PERMISSIONS[Role.VIEWER],
           });
-        } else if (!existingMembership.memberId) {
+        } else {
           existingMembership.memberId = member._id;
           await existingMembership.save();
         }
       } catch (err) {
         // Membership association log if needed
       }
+    }
+
+    // 6. Send notification to family members when a new person is added
+    try {
+      const { notificationService } = await import('./notificationService.ts');
+      await notificationService.notifyFamily({
+        familyId,
+        type: 'MEMBER_ADDED',
+        title: 'New Relative Added',
+        message: `${member.firstName} ${member.lastName} was added to the family tree`,
+        entityType: 'Member',
+        entityId: member._id.toString(),
+        actorUserId: context?.userId,
+        actorName: context?.userName || 'A family member',
+      });
+    } catch (notifErr) {
+      console.warn('Could not dispatch member notification:', notifErr);
     }
 
     await auditService.log(

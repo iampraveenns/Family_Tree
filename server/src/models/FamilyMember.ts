@@ -27,6 +27,7 @@ export interface IFamilyMember extends Document {
   biography?: string;
   createdBy?: Types.ObjectId | string;
   linkedUserId?: Types.ObjectId;
+  registeredEmail?: string;
   branchIds: Types.ObjectId[];
   privacySettings: IMemberPrivacySettings;
   generation: number;
@@ -152,6 +153,12 @@ const FamilyMemberSchema = new Schema<IFamilyMember>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       default: null,
+    },
+    registeredEmail: {
+      type: String,
+      default: '',
+      trim: true,
+      lowercase: true,
     },
     branchIds: [
       {

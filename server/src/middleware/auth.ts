@@ -9,7 +9,7 @@ import { Family } from '../models/Family.ts';
 import { authorizationService } from '../services/authorizationService.ts';
 import { auditService } from '../services/auditService.ts';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors.ts';
-import { Permission, Role, AuditAction, hasPermission, UserStatus, DEFAULT_ROLE_PERMISSIONS } from '../constants/index.ts';
+import { Permission, Role, AuditAction, hasPermission, UserStatus, DEFAULT_ROLE_PERMISSIONS, normalizeRole } from '../constants/index.ts';
 import { IFamilyMembership } from '../models/FamilyMembership.ts';
 
 export interface AuthenticatedUser {
