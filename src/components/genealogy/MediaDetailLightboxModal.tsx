@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { Memory, FamilyMember } from '../../types/index.ts';
 import { MemberAvatar } from '../ui/MemberAvatar.tsx';
-import { resolveMediaStreamUrl, getMemoryCoverUrl, getMemoryVideoUrl, resolveMemoryAuthor } from '../../utils/mediaUtils.ts';
+import { resolveMediaStreamUrl, getMemoryCoverUrl, getMemoryVideoUrl, getMemoryAudioUrl, resolveMemoryAuthor } from '../../utils/mediaUtils.ts';
 import { formatSingleDate } from './HeritageMemberNode.tsx';
 
 export interface MediaDetailLightboxModalProps {
@@ -42,7 +42,7 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
   const videoAsset = memory.media?.find((a) => a.mimeType?.startsWith('video/'));
   const audioAsset = memory.media?.find((a) => a.mimeType?.startsWith('audio/'));
   const videoUrl = getMemoryVideoUrl(memory) || (videoAsset ? resolveMediaStreamUrl(videoAsset) : null);
-  const audioUrl = audioAsset ? resolveMediaStreamUrl(audioAsset) : null;
+  const audioUrl = getMemoryAudioUrl(memory) || (audioAsset ? resolveMediaStreamUrl(audioAsset) : null);
 
   // Resolve tagged members
   const memberMap = new Map<string, FamilyMember>();

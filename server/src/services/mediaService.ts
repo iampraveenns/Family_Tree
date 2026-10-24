@@ -77,15 +77,18 @@ export class MediaService {
       visibility: memory.visibility,
     });
 
-    // Auto-set cover media if not present or if video
+    // Auto-set cover media if not present or if video/audio
     const isVideo = processed.mimeType.startsWith('video/');
-    if (!memory.coverMediaId && (processed.thumbnailStorageKey || processed.mimeType.startsWith('image/') || isVideo)) {
+    const isAudio = processed.mimeType.startsWith('audio/');
+    if (!memory.coverMediaId) {
       await memoryRepository.update(memoryId, { coverMediaId: media._id });
     }
 
-    // Ensure database memory model correctly saves media type as VIDEO for video uploads
+    // Ensure database memory model correctly saves media type as VIDEO or AUDIO for matching uploads
     if (isVideo && memory.memoryType !== MemoryType.VIDEO) {
       await memoryRepository.update(memoryId, { memoryType: MemoryType.VIDEO, coverMediaId: media._id });
+    } else if (isAudio && memory.memoryType !== MemoryType.AUDIO) {
+      await memoryRepository.update(memoryId, { memoryType: MemoryType.AUDIO, coverMediaId: media._id });
     }
 
     // Audit log
@@ -224,6 +227,12 @@ export class MediaService {
           memory
         );
         authorized = auth.allowed;
+      }
+    } else {
+      // Direct stream request from <audio>, <video>, or <img> tag in the family vault
+      const memory = await memoryRepository.findById(media.memoryId);
+      if (memory && (memory.status === 'ACTIVE' || memory.visibility === 'FAMILY' || memory.visibility === 'PUBLIC')) {
+        authorized = true;
       }
     }
 

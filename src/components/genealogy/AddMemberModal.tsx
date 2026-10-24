@@ -364,16 +364,17 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
       return;
     }
 
-    if (!editMember && !registeredEmail.trim()) {
-      setFormError('Cannot create member node: This person must have a registered account first.');
+    const hasDeathDate = Boolean(deathDate && deathDate.trim());
+    const effectiveLiving = hasDeathDate ? false : isLiving;
+    const effectiveDeathDate = effectiveLiving ? '' : deathDate.trim();
+
+    if (!editMember && effectiveLiving && !registeredEmail.trim()) {
+      setFormError('Cannot create member node: Living relatives strictly require a registered account in the authentication database before they can be added.');
       return;
     }
 
     setFormError(null);
     try {
-      const hasDeathDate = Boolean(deathDate && deathDate.trim());
-      const effectiveLiving = hasDeathDate ? false : isLiving;
-      const effectiveDeathDate = effectiveLiving ? '' : deathDate.trim();
 
       const payload: MemberFormData = {
         firstName: firstName.trim(),

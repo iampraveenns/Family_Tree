@@ -130,34 +130,36 @@ export class MemberService {
     if (accountEmail) {
       linkedUser = await userRepository.findByEmail(accountEmail);
       if (!linkedUser) {
-        throw new ValidationError(`Cannot create member node: No registered account found for "${accountEmail}". Every person must have a registered account created first.`);
+        throw new ValidationError(`Cannot create member node: No registered account found for "${accountEmail}". Living relatives strictly require a registered account in the authentication database before they can be added.`);
       }
     } else if (accountUserId && Types.ObjectId.isValid(accountUserId)) {
       linkedUser = await userRepository.findById(accountUserId);
       if (!linkedUser) {
         throw new ValidationError('Cannot create member node: The specified user account does not exist.');
       }
-    } else {
+    } else if (!isDeceased) {
       const existingCount = await FamilyMember.countDocuments({ familyId: new Types.ObjectId(familyId) });
       if (existingCount === 0 && context?.userId && Types.ObjectId.isValid(context.userId)) {
         linkedUser = await userRepository.findById(context.userId);
       }
       if (!linkedUser) {
-        throw new ValidationError('Cannot create member node: A registered account email is required. Every person in the family tree must have a registered account.');
+        throw new ValidationError('Cannot create member node: A registered account email is required. Living family tree nodes strictly require a registered account in the authentication database before they can be added.');
       }
     }
 
-    // Enforce universal 1:1 account-to-node mapping in the family tree
-    const existingNodeForUser = await FamilyMember.findOne({
-      familyId: new Types.ObjectId(familyId),
-      linkedUserId: linkedUser._id,
-    });
-    if (existingNodeForUser) {
-      throw new ValidationError(`The account "${linkedUser.email}" is already linked to member "${existingNodeForUser.displayName}" in this tree.`);
-    }
+    if (linkedUser) {
+      // Enforce universal 1:1 account-to-node mapping in the family tree
+      const existingNodeForUser = await FamilyMember.findOne({
+        familyId: new Types.ObjectId(familyId),
+        linkedUserId: linkedUser._id,
+      });
+      if (existingNodeForUser) {
+        throw new ValidationError(`The account "${linkedUser.email}" is already linked to member "${existingNodeForUser.displayName}" in this tree.`);
+      }
 
-    data.linkedUserId = linkedUser._id;
-    data.registeredEmail = linkedUser.email;
+      data.linkedUserId = linkedUser._id;
+      data.registeredEmail = linkedUser.email;
+    }
 
     // 4. Normalize display name
     const firstName = data.firstName?.trim() || '';

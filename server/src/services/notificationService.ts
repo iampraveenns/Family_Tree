@@ -123,12 +123,6 @@ export class NotificationService {
 
     const promises = activeMembers.map((m) => {
       const recipientId = (m.userId as any)?._id || m.userId;
-      if (
-        data.actorUserId &&
-        data.actorUserId.toString() === recipientId.toString()
-      ) {
-        return Promise.resolve(null);
-      }
       return notificationRepository.create({
         familyId: data.familyId,
         recipientUserId: recipientId,

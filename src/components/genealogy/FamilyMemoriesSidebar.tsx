@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { Memory, FamilyMember, MemoryType } from '../../types/index.ts';
 import { MemberAvatar } from '../ui/MemberAvatar.tsx';
-import { resolveMediaStreamUrl, getMemoryCoverUrl, getMemoryVideoUrl, formatFamilyDisplayName, resolveMemoryAuthor } from '../../utils/mediaUtils.ts';
+import { resolveMediaStreamUrl, getMemoryCoverUrl, getMemoryVideoUrl, getMemoryAudioUrl, formatFamilyDisplayName, resolveMemoryAuthor } from '../../utils/mediaUtils.ts';
 import { VideoMemoryCardPlayer } from './MemoriesSidePanel.tsx';
 import { formatSingleDate } from './HeritageMemberNode.tsx';
 
@@ -405,7 +405,7 @@ export const FamilyMemoriesSidebar: React.FC<FamilyMemoriesSidebarProps> = ({
               const videoAsset = memory.media?.find((a) => a.mimeType?.startsWith('video/'));
               const audioAsset = memory.media?.find((a) => a.mimeType?.startsWith('audio/'));
               const videoUrl = getMemoryVideoUrl(memory) || (videoAsset ? resolveMediaStreamUrl(videoAsset) : null);
-              const audioUrl = audioAsset ? resolveMediaStreamUrl(audioAsset) : null;
+              const audioUrl = getMemoryAudioUrl(memory) || (audioAsset ? resolveMediaStreamUrl(audioAsset) : null);
               const { authorMember, authorName, authorPhoto } = resolveMemoryAuthor(memory, members, memberMap);
 
               return (

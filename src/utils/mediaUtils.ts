@@ -172,6 +172,80 @@ export function getMemoryVideoUrl(memory: Memory | any): string | null {
 }
 
 /**
+ * Resolves the audio streaming/playback URL for an audio memory item.
+ * Checks media array, audioAsset, mediaUrl, audioUrl, coverMedia, and coverMediaUrl.
+ */
+export function getMemoryAudioUrl(memory: Memory | any): string | null {
+  if (!memory) return null;
+
+  // 1. Direct audioUrl or mediaUrl
+  if (memory.audioUrl && typeof memory.audioUrl === 'string') return memory.audioUrl;
+  if (
+    memory.mediaUrl &&
+    typeof memory.mediaUrl === 'string' &&
+    (/\.(mp3|wav|ogg|m4a|aac|webm)$/i.test(memory.mediaUrl) || (memory.memoryType || memory.type) === 'AUDIO')
+  ) {
+    return memory.mediaUrl;
+  }
+
+  // 2. Search media array for audio asset
+  if (Array.isArray(memory.media) && memory.media.length > 0) {
+    const audioAsset = memory.media.find((item: any) => {
+      if (!item) return false;
+      if (item.mimeType?.startsWith('audio/')) return true;
+      const fn = (item.originalFileName || item.storageKey || item.url || item.streamUrl || '').toLowerCase();
+      return (
+        fn.endsWith('.mp3') ||
+        fn.endsWith('.wav') ||
+        fn.endsWith('.ogg') ||
+        fn.endsWith('.m4a') ||
+        fn.endsWith('.aac') ||
+        (fn.endsWith('.webm') && (memory.memoryType || memory.type) === 'AUDIO')
+      );
+    });
+    if (audioAsset) {
+      const url = resolveMediaStreamUrl(audioAsset);
+      if (url) return url;
+    }
+  }
+
+  // 3. From coverMedia if audio
+  if (memory.coverMedia) {
+    const cm = memory.coverMedia;
+    const isAud =
+      cm.mimeType?.startsWith('audio/') ||
+      (cm.storageKey && /\.(mp3|wav|ogg|m4a|aac)$/i.test(cm.storageKey)) ||
+      (cm.originalFileName && /\.(mp3|wav|ogg|m4a|aac)$/i.test(cm.originalFileName));
+    if (isAud) {
+      const url = resolveMediaStreamUrl(cm);
+      if (url) return url;
+    }
+  }
+
+  // 4. If memoryType is AUDIO, fallback to coverMedia / coverMediaUrl / first media
+  const type = (memory.memoryType || memory.type || '').toUpperCase();
+  if (type === 'AUDIO') {
+    if (memory.coverMediaUrl && !memory.coverMediaUrl.includes('unsplash.com')) {
+      return memory.coverMediaUrl;
+    }
+    if (memory.coverMedia) {
+      const url = resolveMediaStreamUrl(memory.coverMedia);
+      if (url) return url;
+    }
+    if (memory.coverMediaId) {
+      const url = resolveMediaStreamUrl(memory.coverMediaId, memory.coverMediaId);
+      if (url) return url;
+    }
+    if (Array.isArray(memory.media) && memory.media.length > 0) {
+      const url = resolveMediaStreamUrl(memory.media[0]);
+      if (url) return url;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Formats a family name to the canonical format (e.g. "Pattara Family", "Sikawath Family").
  */
 export function formatFamilyDisplayName(rawName?: string | null): string {

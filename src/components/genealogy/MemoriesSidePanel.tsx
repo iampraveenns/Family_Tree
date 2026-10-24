@@ -23,7 +23,8 @@ import {
 } from 'lucide-react';
 import { Memory, FamilyMember, MediaAsset } from '../../types/index.ts';
 import { MemberAvatar } from '../ui/MemberAvatar.tsx';
-import { resolveMediaStreamUrl, getMemoryCoverUrl, getMemoryVideoUrl, resolveMemoryAuthor } from '../../utils/mediaUtils.ts';
+import { resolveMediaStreamUrl, getMemoryCoverUrl, getMemoryVideoUrl, getMemoryAudioUrl, resolveMemoryAuthor } from '../../utils/mediaUtils.ts';
+import { formatSingleDate } from './HeritageMemberNode.tsx';
 
 export interface MemoriesSidePanelProps {
   isOpen: boolean;
@@ -148,6 +149,136 @@ export const VideoMemoryCardPlayer: React.FC<VideoMemoryCardPlayerProps> = ({
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+export const AudioMemoryCardPlayer: React.FC<{
+  memory: Memory;
+  onOpenFullView?: () => void;
+}> = ({ memory, onOpenFullView }) => {
+  const audioUrl = getMemoryAudioUrl(memory);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch((err) => {
+        console.warn('Audio play request failed or blocked:', err);
+      });
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+      if (audioRef.current.duration && !isNaN(audioRef.current.duration)) {
+        setDuration(audioRef.current.duration);
+      }
+    }
+  };
+
+  const formatSeconds = (sec: number) => {
+    if (isNaN(sec) || sec <= 0) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  return (
+    <div
+      className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/70 border border-emerald-200/80 flex flex-col gap-2.5 shadow-xs"
+      data-testid={`audio-player-${memory.id}`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={togglePlay}
+            disabled={!audioUrl}
+            className={`w-10 h-10 rounded-full flex items-center justify-center shadow-xs transition-transform active:scale-95 cursor-pointer ${
+              audioUrl
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                : 'bg-emerald-300 text-white/80 cursor-not-allowed'
+            }`}
+            title={isPlaying ? 'Pause audio recording' : 'Play audio recording'}
+          >
+            {isPlaying ? (
+              <Pause className="w-4 h-4 fill-white" />
+            ) : (
+              <Play className="w-4 h-4 ml-0.5 fill-white" />
+            )}
+          </button>
+          <div>
+            <span className="text-xs font-bold text-emerald-950 block">
+              Oral History & Voice
+            </span>
+            <span className="text-[10px] text-emerald-700 font-medium">
+              {isPlaying
+                ? `Playing • ${formatSeconds(currentTime)} / ${formatSeconds(duration)}`
+                : audioUrl
+                ? duration > 0 ? `Click to listen (${formatSeconds(duration)})` : 'Click to listen'
+                : 'Audio recording saved'}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Volume2 className={`w-4 h-4 ${isPlaying ? 'text-emerald-700 animate-pulse' : 'text-emerald-600'}`} />
+          {onOpenFullView && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenFullView();
+              }}
+              className="p-1 text-emerald-700 hover:text-emerald-900 rounded-md hover:bg-emerald-200/50 cursor-pointer"
+              title="Open full detail"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Actual HTML5 Audio element */}
+      {audioUrl && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          preload="metadata"
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => setIsPlaying(false)}
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleTimeUpdate}
+          className="w-full h-8 mt-1 accent-emerald-600"
+          controls
+        />
+      )}
+
+      {/* Stylized waveform visualizer */}
+      <div className="flex items-center gap-1 h-5 px-2 bg-white/90 rounded-lg">
+        {[40, 70, 30, 90, 50, 80, 60, 100, 45, 85, 65, 30, 95, 55, 75, 40, 80, 60, 35].map(
+          (height, i) => (
+            <span
+              key={i}
+              className={`w-1 rounded-full transition-all duration-150 ${
+                isPlaying ? 'bg-emerald-600 animate-pulse' : 'bg-emerald-300'
+              }`}
+              style={{
+                height: `${isPlaying ? Math.min(100, height + (i % 3) * 10) : height}%`,
+                animationDelay: `${i * 70}ms`,
+              }}
+            />
+          )
+        )}
+      </div>
     </div>
   );
 };
@@ -538,51 +669,10 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                       )}
 
                       {category === 'AUDIO' && (
-                        <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/60 border border-emerald-200 flex flex-col gap-2">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => toggleAudio(mem.id)}
-                                className="w-9 h-9 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-xs transition-colors cursor-pointer"
-                                title={isAudioActive ? 'Pause audio' : 'Play audio recording'}
-                              >
-                                {isAudioActive ? (
-                                  <Pause className="w-4 h-4 fill-white" />
-                                ) : (
-                                  <Play className="w-4 h-4 ml-0.5 fill-white" />
-                                )}
-                              </button>
-                              <div>
-                                <span className="text-xs font-bold text-emerald-950 block">
-                                  Oral History & Voice
-                                </span>
-                                <span className="text-[10px] text-emerald-700">
-                                  {isAudioActive ? 'Playing recording...' : 'Click to listen'}
-                                </span>
-                              </div>
-                            </div>
-                            <Volume2 className="w-4 h-4 text-emerald-600" />
-                          </div>
-
-                          {/* Stylized waveform visualizer */}
-                          <div className="flex items-center gap-1 h-6 px-2 bg-white/80 rounded-lg">
-                            {[40, 70, 30, 90, 50, 80, 60, 100, 45, 85, 65, 30, 95, 55, 75, 40, 80, 60, 35].map(
-                              (height, i) => (
-                                <span
-                                  key={i}
-                                  className={`w-1 rounded-full transition-all duration-150 ${
-                                    isAudioActive ? 'bg-emerald-600 animate-pulse' : 'bg-emerald-300'
-                                  }`}
-                                  style={{
-                                    height: `${isAudioActive ? Math.min(100, height + (i % 3) * 10) : height}%`,
-                                    animationDelay: `${i * 70}ms`,
-                                  }}
-                                />
-                              )
-                            )}
-                          </div>
-                        </div>
+                        <AudioMemoryCardPlayer
+                          memory={mem}
+                          onOpenFullView={() => setSelectedMemoryDetail(mem)}
+                        />
                       )}
 
                       {category === 'STORY_DOC' && !coverUrl && (
@@ -633,10 +723,10 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                             </span>
                           )}
 
-                          {mem.eventDateApprox || mem.eventDate ? (
+                          {mem.eventDate || mem.eventDateApprox ? (
                             <span className="inline-flex items-center gap-1 text-[#475569]">
                               <Calendar className="w-3 h-3 text-[#94A3B8]" />
-                              {mem.eventDateApprox || new Date(mem.eventDate!).getFullYear()}
+                              {formatSingleDate(mem.eventDate) || (mem.eventDateApprox && !/^\d{4}$/.test(mem.eventDateApprox) ? mem.eventDateApprox : formatSingleDate(mem.eventDateApprox)) || mem.eventDateApprox || mem.eventDate}
                             </span>
                           ) : null}
                         </div>
@@ -750,7 +840,7 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                       <div>
                         <h3 className="font-bold text-sm text-[#0F172A]">{selectedMemoryDetail.title}</h3>
                         <p className="text-[11px] text-[#64748B]">
-                          {selectedMemoryDetail.eventDateApprox || selectedMemoryDetail.location || 'Preserved memory'} • Added by <strong className="text-blue-700">{modalAuthorName}</strong>
+                          {(selectedMemoryDetail.eventDate && formatSingleDate(selectedMemoryDetail.eventDate)) || selectedMemoryDetail.eventDateApprox || selectedMemoryDetail.location || 'Preserved memory'} • Added by <strong className="text-blue-700">{modalAuthorName}</strong>
                         </p>
                       </div>
                     </div>
@@ -783,6 +873,24 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                       </div>
                     );
                   }
+
+                  const modalAudioUrl = getMemoryAudioUrl(selectedMemoryDetail);
+                  const isAudio = getMemoryCategory(selectedMemoryDetail) === 'AUDIO' || !!modalAudioUrl;
+                  if (isAudio && modalAudioUrl) {
+                    return (
+                      <div className="p-6 rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/70 border border-emerald-200 flex flex-col items-center justify-center text-center shadow-sm">
+                        <div className="w-14 h-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center mb-3 shadow-md">
+                          <Volume2 className="w-7 h-7" />
+                        </div>
+                        <h4 className="text-sm font-bold text-emerald-950 mb-1">Spoken Family Narrative & Voice</h4>
+                        <p className="text-xs text-emerald-700 mb-4 max-w-md">
+                          Oral history and voice keepsake preserved in the family archive.
+                        </p>
+                        <audio controls src={modalAudioUrl} autoPlay className="w-full max-w-md accent-emerald-600" />
+                      </div>
+                    );
+                  }
+
                   if (getMemoryCoverUrl(selectedMemoryDetail)) {
                     return (
                       <div className="rounded-xl overflow-hidden bg-slate-900 border border-slate-200">
@@ -808,10 +916,12 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
 
                 {/* Information Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100 text-xs">
-                  {selectedMemoryDetail.eventDateApprox && (
+                  {(selectedMemoryDetail.eventDate || selectedMemoryDetail.eventDateApprox) && (
                     <div className="p-2.5 rounded-xl bg-slate-50">
                       <span className="text-[10px] font-bold uppercase text-slate-400 block">Date / Period</span>
-                      <span className="font-semibold text-slate-800">{selectedMemoryDetail.eventDateApprox}</span>
+                      <span className="font-semibold text-slate-800">
+                        {formatSingleDate(selectedMemoryDetail.eventDate) || selectedMemoryDetail.eventDateApprox || selectedMemoryDetail.eventDate}
+                      </span>
                     </div>
                   )}
 

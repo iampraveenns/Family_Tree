@@ -237,6 +237,31 @@ export class AuthService {
       { ip: data.ip, userAgent: data.userAgent }
     );
 
+    const { FamilyMember } = await import('../models/FamilyMember.ts');
+    const { FamilyMembership } = await import('../models/FamilyMembership.ts');
+
+    let linkedMember = await FamilyMember.findOne({ linkedUserId: user._id });
+    if (!linkedMember && user.email) {
+      linkedMember = await FamilyMember.findOne({
+        $or: [
+          { registeredEmail: user.email.toLowerCase().trim() },
+          { email: user.email.toLowerCase().trim() },
+        ],
+      });
+      if (linkedMember) {
+        linkedMember.linkedUserId = user._id;
+        await linkedMember.save();
+      }
+    }
+
+    if (linkedMember) {
+      const mem = await FamilyMembership.findOne({ userId: user._id, familyId: linkedMember.familyId });
+      if (mem && (!mem.memberId || mem.memberId.toString() !== linkedMember._id.toString())) {
+        mem.memberId = linkedMember._id;
+        await mem.save();
+      }
+    }
+
     const memberships = await membershipRepository.findByUser(user._id);
 
     return {
@@ -247,7 +272,10 @@ export class AuthService {
         avatar: user.avatar,
         status: user.status,
         lastLoginAt: user.lastLoginAt,
+        memberId: linkedMember ? linkedMember._id.toString() : undefined,
+        linkedMemberId: linkedMember ? linkedMember._id.toString() : undefined,
       },
+      member: linkedMember ? linkedMember.toObject() : undefined,
       memberships,
       accessToken,
       refreshToken: rawToken,
@@ -344,6 +372,17 @@ export class AuthService {
 
     const memberships = await membershipRepository.findByUser(userId);
 
+    const { FamilyMember } = await import('../models/FamilyMember.ts');
+    let linkedMember = await FamilyMember.findOne({ linkedUserId: user._id });
+    if (!linkedMember && user.email) {
+      linkedMember = await FamilyMember.findOne({
+        $or: [
+          { registeredEmail: user.email.toLowerCase().trim() },
+          { email: user.email.toLowerCase().trim() },
+        ],
+      });
+    }
+
     return {
       user: {
         id: user._id.toString(),
@@ -352,7 +391,10 @@ export class AuthService {
         avatar: user.avatar,
         status: user.status,
         lastLoginAt: user.lastLoginAt,
+        memberId: linkedMember ? linkedMember._id.toString() : undefined,
+        linkedMemberId: linkedMember ? linkedMember._id.toString() : undefined,
       },
+      member: linkedMember ? linkedMember.toObject() : undefined,
       memberships,
     };
   }
