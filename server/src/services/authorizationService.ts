@@ -98,7 +98,27 @@ export class AuthorizationService {
       return { allowed: true };
     }
 
-    // VIEWER is strictly read-only for all tree member operations
+    // Secure Self-Profile Editing (JWT / Account-to-Node Matching)
+    // Allow users to edit only their own profile once a match is confirmed between account and node
+    if (permission === Permission.EDIT_MEMBER) {
+      let isMatch = false;
+      if (membership.memberId && membership.memberId.toString() === _targetMemberId.toString()) {
+        isMatch = true;
+      } else {
+        const targetMember = Types.ObjectId.isValid(_targetMemberId.toString())
+          ? await memberRepository.findById(_targetMemberId.toString())
+          : null;
+        if (targetMember && targetMember.linkedUserId && targetMember.linkedUserId.toString() === userId.toString()) {
+          isMatch = true;
+        }
+      }
+      if (isMatch) {
+        return { allowed: true };
+      }
+      return { allowed: false, reason: 'You are only authorized to edit your own profile node in the family tree' };
+    }
+
+    // VIEWER is strictly read-only for all other tree member operations (add, delete)
     if (effectiveRole === Role.VIEWER) {
       if (permission === Permission.VIEW_MEMBER) return { allowed: true };
       return { allowed: false, reason: 'Viewers have read-only access to tree members' };

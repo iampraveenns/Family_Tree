@@ -436,7 +436,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         editMember
           ? `Edit Profile: ${editMember.displayName || `${editMember.firstName} ${editMember.lastName}`}`
           : isRootAncestor
-          ? 'Add Root Ancestor'
+          ? 'Add Starting Relative (Root Ancestor Node)'
           : referenceMember
           ? `Add ${relationshipType.replace(/_/g, ' ').toLowerCase()} to ${referenceMember.firstName}`
           : 'Add Family Member'
@@ -445,7 +445,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         editMember
           ? 'Update genealogical records, life dates, bio, or branch details'
           : isRootAncestor
-          ? 'Initialize your family tree with the primary root ancestor (Generation 1)'
+          ? 'Add the founding root ancestor member node. Note: This creates an individual person node, distinct from the Family Tree Name.'
           : 'Graph-validated kinship link in your family chronicle'
       }
       id="add-member-modal"
@@ -735,7 +735,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
             {isRootAncestor ? (
               <div className="p-3 rounded-xl border border-blue-200 bg-[#EFF6FF] text-xs text-[#1D4ED8] font-medium flex items-center gap-2.5">
                 <GitFork className="w-4 h-4 text-[#2563EB] shrink-0" />
-                <span>Starting Branch • Primary Root Ancestor (Generation 1)</span>
+                <span>Founding Person Node • Root Ancestor (Generation 1)</span>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1227,7 +1227,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               {editMember
                 ? 'Save Profile Changes'
                 : isRootAncestor
-                ? 'Create Root Ancestor'
+                ? 'Add Root Ancestor Node'
                 : 'Save Relationship'}
             </span>
           </button>

@@ -240,6 +240,33 @@ const FamilyTreeInner: React.FC = () => {
     setShowHint(false);
   }, [members]);
 
+  // Current Authenticated User for Account-to-Node Matching
+  const [currentUser, setCurrentUser] = useState<{ id: string; email: string; memberId?: string } | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    authenticatedFetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (isMounted && json?.success && json?.data?.user) {
+          setCurrentUser({
+            id: json.data.user.id || json.data.user._id,
+            email: json.data.user.email,
+            memberId: json.data.user.memberId || json.data.user.linkedMemberId || json.data.member?.id || json.data.member?._id,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [activeFamilyId, currentFamily?.id]);
+
+  // Dedicated Rename Family Tree Modal state (Family Tree Name & Root Ancestor Separation)
+  const [isRenameTreeModalOpen, setIsRenameTreeModalOpen] = useState(false);
+  const [treeNameInput, setTreeNameInput] = useState('');
+  const [isRenamingTree, setIsRenamingTree] = useState(false);
+
   // Dedicated Member Memory Upload Modal from Family Tree Nodes
   const [memoryUploadMember, setMemoryUploadMember] = useState<FamilyMember | null>(null);
   const [isMemoryUploadModalOpen, setIsMemoryUploadModalOpen] = useState(false);
@@ -740,11 +767,33 @@ const FamilyTreeInner: React.FC = () => {
         };
       }
       if (node.type !== 'heritageMember') return node;
-      const hasSpouse = node.data.hasSpouse !== undefined ? node.data.hasSpouse : memberHasSpouse(node.data.member.id);
+      const memberObj = node.data.member;
+      const hasSpouse = node.data.hasSpouse !== undefined ? node.data.hasSpouse : memberHasSpouse(memberObj.id);
       const isSecondarySpouse = node.data.isSecondarySpouse ?? false;
       const isPrimaryPartner = node.data.isPrimaryPartner ?? !isSecondarySpouse;
       const hideRelationshipActions = node.data.hideRelationshipActions ?? isSecondarySpouse;
       const effectiveMarriageDate = isSecondarySpouse ? null : node.data.marriageDate;
+
+      // Secure check matching authenticated user to their exact node in the tree
+      const isUserSelfNode = Boolean(
+        currentUser && (
+          (memberObj.linkedUserId && memberObj.linkedUserId === currentUser.id) ||
+          (currentUser.memberId && memberObj.id === currentUser.memberId) ||
+          (memberObj.registeredEmail && currentUser.email && memberObj.registeredEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim()) ||
+          ((memberObj as any).email && currentUser.email && (memberObj as any).email.toLowerCase().trim() === currentUser.email.toLowerCase().trim())
+        )
+      );
+
+      // Distinct root ancestor node detection (Generation 1 person with no parent relationships)
+      const isRootNode = Boolean(
+        (memberObj.generation === 1 || !memberObj.generation) &&
+        !relationships.some(
+          (r) =>
+            (r.relationshipType === 'PARENT' && r.targetMemberId === memberObj.id) ||
+            (r.relationshipType === 'CHILD' && r.sourceMemberId === memberObj.id)
+        )
+      );
+
       return {
         ...node,
         data: {
@@ -761,7 +810,10 @@ const FamilyTreeInner: React.FC = () => {
           isPrimaryPartner,
           isSecondarySpouse,
           hideRelationshipActions,
-          canEdit: isAdmin,
+          canEdit: isAdmin || isUserSelfNode,
+          canAddRelatives: isAdmin,
+          isUserSelfNode,
+          isRootNode,
           marriageDate: effectiveMarriageDate,
           onSelect: (_sel: FamilyMember) => {
             // Node/card click -> NO profile opening and NO automatic selection (Requirements 1, 2, 9)
@@ -800,7 +852,7 @@ const FamilyTreeInner: React.FC = () => {
         },
       };
     });
-  }, [layoutResult.nodes, handleOpenAddRelative, handleOpenEditModal, handleToggleLiving, handleOpenLifeStatusModal, members, isSubmitting, memberHasSpouse, isAdmin]);
+  }, [layoutResult.nodes, handleOpenAddRelative, handleOpenEditModal, handleToggleLiving, handleOpenLifeStatusModal, members, isSubmitting, memberHasSpouse, isAdmin, currentUser, relationships]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(finalNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutResult.edges);
@@ -1490,6 +1542,21 @@ const FamilyTreeInner: React.FC = () => {
               <h2 className="text-2xl sm:text-[28px] font-bold text-[#17233C] tracking-tight" data-testid="family-heading-name">
                 {formatFamilyDisplayName(currentFamily?.name)}
               </h2>
+              {isAdmin && (
+                <button
+                  type="button"
+                  data-testid="edit-tree-name-button"
+                  onClick={() => {
+                    setTreeNameInput(currentFamily?.name || '');
+                    setIsRenameTreeModalOpen(true);
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-[#2563EB] hover:bg-blue-50 transition-colors cursor-pointer"
+                  title="Rename Family Tree (Dedicated Family Tree Name)"
+                  aria-label="Rename Family Tree"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
               {availableFamilies.length > 1 && (
                 <button
                   type="button"
@@ -1540,8 +1607,8 @@ const FamilyTreeInner: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Branch Filter Tabs with Left/Right Scroll (Shows 4 branches at a time including All Branches) */}
-          <div className="flex items-center rounded-xl bg-white p-1 border-[1.5px] border-[#CBD5E1] text-xs shadow-xs">
+          {/* Dynamic Branch Filter Tabs (Shrinks & Expands dynamically with active branches) */}
+          <div className="flex items-center rounded-xl bg-white p-1 border-[1.5px] border-[#CBD5E1] text-xs shadow-xs w-auto max-w-full transition-all">
             {/* Scroll Left Button */}
             <button
               type="button"
@@ -1549,16 +1616,22 @@ const FamilyTreeInner: React.FC = () => {
               onClick={() => handleScrollBranches('left')}
               aria-label="Scroll branches left"
               title="Scroll branches left"
-              className="p-1 rounded-lg text-[#64748B] hover:text-[#2563EB] hover:bg-[#F1F5F9] transition-colors cursor-pointer shrink-0"
+              className={`p-1 rounded-lg text-[#64748B] hover:text-[#2563EB] hover:bg-[#F1F5F9] transition-colors cursor-pointer shrink-0 ${
+                branches.length > 2 ? 'inline-flex' : 'hidden'
+              }`}
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
 
-            {/* Scrollable Container with exact width showing 4 branches including All Branches */}
+            {/* Scrollable Container dynamically sized to shrink/expand based on branch count */}
             <div
               ref={branchScrollRef}
               data-testid="branches-scroll-container"
-              className="flex items-center gap-1.5 overflow-x-auto scroll-smooth w-[430px] max-w-[calc(100vw-240px)] select-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              className="flex items-center gap-1.5 overflow-x-auto scroll-smooth w-auto max-w-[430px] w-[430px] select-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              style={{
+                width: branches.length <= 1 ? 'auto' : undefined,
+                maxWidth: '430px',
+              }}
             >
               <button
                 onClick={() => setSelectedBranch(null)}
@@ -1595,7 +1668,9 @@ const FamilyTreeInner: React.FC = () => {
               onClick={() => handleScrollBranches('right')}
               aria-label="Scroll branches right"
               title="Scroll branches right"
-              className="p-1 rounded-lg text-[#64748B] hover:text-[#2563EB] hover:bg-[#F1F5F9] transition-colors cursor-pointer shrink-0"
+              className={`p-1 rounded-lg text-[#64748B] hover:text-[#2563EB] hover:bg-[#F1F5F9] transition-colors cursor-pointer shrink-0 ${
+                branches.length > 2 ? 'inline-flex' : 'hidden'
+              }`}
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
@@ -1681,7 +1756,7 @@ const FamilyTreeInner: React.FC = () => {
                 }
               }}
             >
-              {members.length === 0 ? 'Add Root Ancestor' : 'Add Relative'}
+              {members.length === 0 ? 'Add Starting Member' : 'Add Relative'}
             </Button>
           ) : (
             <button
@@ -2126,18 +2201,37 @@ const FamilyTreeInner: React.FC = () => {
                     </div>
                   </div>
 
-                  {isAdmin && (
-                    <div className="pt-1">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditModal(activeDrawerMember)}
-                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border-[1.5px] border-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1D4ED8] text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        <span>Edit Member Profile</span>
-                      </button>
-                    </div>
-                  )}
+                  {(() => {
+                    const isDrawerMemberSelf = Boolean(
+                      activeDrawerMember && currentUser && (
+                        (activeDrawerMember.linkedUserId && activeDrawerMember.linkedUserId === currentUser.id) ||
+                        (currentUser.memberId && activeDrawerMember.id === currentUser.memberId) ||
+                        (activeDrawerMember.registeredEmail && currentUser.email && activeDrawerMember.registeredEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim()) ||
+                        ((activeDrawerMember as any).email && currentUser.email && (activeDrawerMember as any).email.toLowerCase().trim() === currentUser.email.toLowerCase().trim())
+                      )
+                    );
+
+                    if (isAdmin || isDrawerMemberSelf) {
+                      return (
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(activeDrawerMember)}
+                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border-[1.5px] border-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1D4ED8] text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            <span>{isDrawerMemberSelf && !isAdmin ? 'Edit Your Profile' : 'Edit Member Profile'}</span>
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="pt-1 text-[11px] text-[#64748B] italic text-center">
+                        View-only relative profile. You can edit your own profile node once matched.
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -2727,6 +2821,84 @@ const FamilyTreeInner: React.FC = () => {
           setIsAddRelationshipOpen(true);
         }}
       />
+
+      {/* Dedicated Rename Family Tree Modal (Family Tree Name & Root Ancestor Separation) */}
+      <Modal
+        isOpen={isRenameTreeModalOpen}
+        onClose={() => setIsRenameTreeModalOpen(false)}
+        title="Edit Family Tree Name"
+        description="Set a dedicated name for the entire family tree chronicle, distinct from the root ancestor member node."
+        maxWidth="sm"
+      >
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!treeNameInput.trim() || isRenamingTree) return;
+            const famId = currentFamily?.id || activeFamilyId;
+            if (!famId) return;
+            try {
+              setIsRenamingTree(true);
+              const res = await authenticatedFetch(`/api/families/${famId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: treeNameInput.trim() }),
+              });
+              const json = await res.json().catch(() => null);
+              if (!res.ok) throw new Error(json?.message || 'Failed to update family tree name');
+              useFamilyStore.setState((state) => ({
+                currentFamily: { ...state.currentFamily, name: treeNameInput.trim() },
+                availableFamilies: state.availableFamilies.map((f) =>
+                  f.id === famId ? { ...f, name: treeNameInput.trim() } : f
+                ),
+              }));
+              success(`Family tree name updated to "${treeNameInput.trim()}".`, 'Tree Renamed');
+              setIsRenameTreeModalOpen(false);
+            } catch (err: any) {
+              toastError(err?.message || 'Failed to update family tree name', 'Error');
+            } finally {
+              setIsRenamingTree(false);
+            }
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-xs font-semibold text-[#475569] mb-1">
+              Family Tree Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={treeNameInput}
+              onChange={(e) => setTreeNameInput(e.target.value)}
+              placeholder="e.g. The Pattara Family Tree"
+              required
+              autoFocus
+              className="w-full px-3 py-2 text-xs rounded-xl border border-[#E2E8F0] bg-white text-[#0F172A] focus:ring-2 focus:ring-[#2563EB] focus:border-transparent outline-none shadow-xs"
+            />
+            <p className="text-[11px] text-[#64748B] mt-1.5">
+              This names the overall family tree. The root ancestor remains a distinct member node inside the tree structure.
+            </p>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#E2E8F0]">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsRenameTreeModalOpen(false)}
+              disabled={isRenamingTree}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              isLoading={isRenamingTree}
+              className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white"
+            >
+              Save Tree Name
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Phase 41: Full-Size Profile Photo Lightbox */}
       {photoViewerState && (

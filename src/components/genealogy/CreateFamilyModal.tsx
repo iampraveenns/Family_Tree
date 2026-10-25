@@ -33,7 +33,7 @@ export const CreateFamilyModal: React.FC<CreateFamilyModalProps> = ({
     if (isSubmitting) return;
 
     if (!name.trim()) {
-      setErrorMessage('Family name is required to establish your vault.');
+      setErrorMessage('Family tree name is required to establish your vault.');
       return;
     }
 
@@ -48,7 +48,7 @@ export const CreateFamilyModal: React.FC<CreateFamilyModalProps> = ({
         description: description.trim() || undefined,
       });
 
-      success(`Family Vault "${newFamily.name}" established successfully!`, 'Vault Created');
+      success(`Family Tree "${newFamily.name}" established successfully!`, 'Tree Created');
 
       // Clear form only on success
       setName('');
@@ -61,7 +61,7 @@ export const CreateFamilyModal: React.FC<CreateFamilyModalProps> = ({
         onSuccess(newFamily);
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Failed to establish family vault. Please try again.');
+      setErrorMessage(err?.message || 'Failed to establish family tree vault. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -77,12 +77,12 @@ export const CreateFamilyModal: React.FC<CreateFamilyModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Establish New Family Vault"
+      title="Establish New Family Tree"
       maxWidth="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <p className="text-xs text-[#64748B]">
-          Create a private, multi-generational archive to preserve your lineage, memories, and ancestral stories.
+          Establish a dedicated family tree vault to preserve your lineage, memories, and ancestral stories.
         </p>
 
         {errorMessage && (
@@ -94,12 +94,12 @@ export const CreateFamilyModal: React.FC<CreateFamilyModalProps> = ({
 
         <div>
           <label className="block text-xs font-semibold text-[#475569] mb-1">
-            Family Name <span className="text-red-500">*</span>
+            Family Tree Name <span className="text-red-500">*</span>
           </label>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., The Kumar Family or Pattara Family"
+            placeholder="e.g., The Kumar Family Tree or Pattara Family Chronicle"
             required
             autoFocus
           />

@@ -3,6 +3,7 @@ import { relationshipRepository } from '../repositories/relationshipRepository.t
 import { memberRepository } from '../repositories/memberRepository.ts';
 import { familyService } from './familyService.ts';
 import { auditService } from './auditService.ts';
+import { branchService } from './branchService.ts';
 import { IRelationship } from '../models/Relationship.ts';
 import { ConflictError, NotFoundError, ValidationError } from '../utils/errors.ts';
 import { AuditAction, ErrorCode, RelationshipType, RelationshipStatus } from '../constants/index.ts';
@@ -291,6 +292,9 @@ export class RelationshipService {
         targetMemberId,
       }
     );
+
+    // Automate branch assignment: whenever a member has both a spouse and a child, auto-create their dedicated branch
+    await branchService.syncAutomaticBranches(familyId, context);
 
     return relationship;
   }

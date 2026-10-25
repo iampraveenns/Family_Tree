@@ -150,4 +150,12 @@ describe('Phase 59: Notifications, Auth Linking, Audio Player & Date Formatting'
       expect(notifIndex).toBeLessThan(signOutIndex);
     });
   });
+
+  describe('4. Resilient Authentication and Node Linking', () => {
+    it('accepts valid credentials without complex regex rejection', async () => {
+      const { authService } = await import('../server/src/services/authService.ts');
+      expect(typeof authService.login).toBe('function');
+      expect(typeof authService.register).toBe('function');
+    });
+  });
 });

@@ -12,8 +12,8 @@ import { FamilyEvent } from '../models/FamilyEvent.ts';
 import { FamilyMembership } from '../models/FamilyMembership.ts';
 import { FamilyInvitation } from '../models/FamilyInvitation.ts';
 import { userRepository } from '../repositories/userRepository.ts';
-import { NotFoundError, ValidationError } from '../utils/errors.ts';
-import { AuditAction, ErrorCode, Role, DEFAULT_ROLE_PERMISSIONS, BranchVisibility } from '../constants/index.ts';
+import { NotFoundError, ValidationError, ForbiddenError } from '../utils/errors.ts';
+import { AuditAction, ErrorCode, Role, DEFAULT_ROLE_PERMISSIONS, BranchVisibility, normalizeRole } from '../constants/index.ts';
 import { ServiceContext } from './familyService.ts';
 
 export class MemberService {
@@ -320,6 +320,25 @@ export class MemberService {
     }
 
     const effectiveFamilyId = existing.familyId ? existing.familyId.toString() : resolvedFamilyId;
+
+    // Secure Self-Profile Editing (JWT / Account-to-Node Matching)
+    if (context?.userId && Types.ObjectId.isValid(context.userId)) {
+      const membership = await membershipRepository.findByUserAndFamily(context.userId, effectiveFamilyId);
+      const isRoleAdmin = membership ? normalizeRole(membership.role) === Role.ADMIN : false;
+      if (!isRoleAdmin) {
+        const isSelfNode = Boolean(
+          (existing.linkedUserId && existing.linkedUserId.toString() === context.userId) ||
+          (membership?.memberId && membership.memberId.toString() === existing._id.toString())
+        );
+        if (!isSelfNode) {
+          throw new ForbiddenError('You are only authorized to edit your own profile node in the family tree');
+        }
+        delete data.branchIds;
+        delete data.linkedUserId;
+        delete (data as any).registeredEmail;
+        delete (data as any).generation;
+      }
+    }
 
     // Validate and resolve branch updates if provided
     if (data.branchIds && data.branchIds.length > 0) {

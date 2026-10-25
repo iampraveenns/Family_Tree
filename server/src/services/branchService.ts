@@ -466,6 +466,142 @@ export class BranchService {
       targetBranchName: targetBranch.name,
     };
   }
+
+  /**
+   * Automatic Branch Creation:
+   * Whenever a person in the tree has both a spouse and a child,
+   * automatically create a separate, dedicated branch named after that member (e.g., [Member Name]'s Family Branch).
+   */
+  async syncAutomaticBranches(familyId: string, context?: ServiceContext): Promise<void> {
+    try {
+      if (!Types.ObjectId.isValid(familyId)) return;
+      const familyOid = new Types.ObjectId(familyId);
+      const members = await memberRepository.findAllByFamily(familyId);
+      if (!members || members.length === 0) return;
+
+      const { relationshipRepository } = await import('../repositories/relationshipRepository.ts');
+      const { Branch } = await import('../models/Branch.ts');
+
+      const relationships = await relationshipRepository.findByFamilyId(familyId);
+
+      // Maps for spouse and children
+      const spousesByMember = new Map<string, Set<string>>();
+      const childrenByMember = new Map<string, Set<string>>();
+
+      for (const rel of relationships) {
+        const src = rel.sourceMemberId.toString();
+        const tgt = rel.targetMemberId.toString();
+
+        if (rel.relationshipType === 'SPOUSE') {
+          if (!spousesByMember.has(src)) spousesByMember.set(src, new Set());
+          if (!spousesByMember.has(tgt)) spousesByMember.set(tgt, new Set());
+          spousesByMember.get(src)!.add(tgt);
+          spousesByMember.get(tgt)!.add(src);
+        } else if (
+          rel.relationshipType === 'PARENT' ||
+          rel.relationshipType === 'ADOPTIVE_PARENT' ||
+          rel.relationshipType === 'STEP_PARENT'
+        ) {
+          // src is parent, tgt is child
+          if (!childrenByMember.has(src)) childrenByMember.set(src, new Set());
+          childrenByMember.get(src)!.add(tgt);
+        } else if (
+          rel.relationshipType === 'CHILD' ||
+          rel.relationshipType === 'ADOPTED_CHILD' ||
+          rel.relationshipType === 'STEP_CHILD'
+        ) {
+          // tgt is parent, src is child
+          if (!childrenByMember.has(tgt)) childrenByMember.set(tgt, new Set());
+          childrenByMember.get(tgt)!.add(src);
+        }
+      }
+
+      // Check each member: does this person have both a spouse and a child?
+      for (const member of members) {
+        const memId = member._id.toString();
+        const memberSpouses = spousesByMember.get(memId);
+        const memberChildren = childrenByMember.get(memId);
+
+        const hasSpouse = Boolean(memberSpouses && memberSpouses.size > 0);
+        const hasChild = Boolean(memberChildren && memberChildren.size > 0);
+
+        if (hasSpouse && hasChild) {
+          const memberName = (member.displayName || `${member.firstName} ${member.lastName}`).trim();
+          const branchName = `${memberName}'s Family Branch`;
+
+          // Check if branch already exists for this member
+          let branch = await Branch.findOne({
+            familyId: familyOid,
+            $or: [
+              { rootMemberId: member._id },
+              { name: branchName },
+            ],
+          });
+
+          if (!branch) {
+            branch = await Branch.create({
+              familyId: familyOid,
+              name: branchName,
+              description: `Dedicated lineage branch established for ${memberName} and descendants.`,
+              rootMemberId: member._id,
+              accentColor: '#2563EB',
+              createdBy: context?.userId || 'system',
+              visibility: BranchVisibility.FAMILY,
+            });
+          }
+
+          const branchOid = branch._id;
+
+          // Assign branch to this member
+          let memberUpdated = false;
+          if (!member.branchIds.some((b) => b.toString() === branchOid.toString())) {
+            member.branchIds.push(branchOid);
+            memberUpdated = true;
+          }
+          if (memberUpdated) {
+            await member.save();
+          }
+
+          // Assign branch to spouse(s)
+          for (const spouseId of memberSpouses!) {
+            const spouseMember = members.find((m) => m._id.toString() === spouseId);
+            if (spouseMember && !spouseMember.branchIds.some((b) => b.toString() === branchOid.toString())) {
+              spouseMember.branchIds.push(branchOid);
+              await spouseMember.save();
+            }
+          }
+
+          // Assign branch to children (and propagate to descendants if descendant does not have their own spouse+child branch)
+          const queue = Array.from(memberChildren!);
+          const visited = new Set<string>();
+          while (queue.length > 0) {
+            const childId = queue.shift()!;
+            if (visited.has(childId)) continue;
+            visited.add(childId);
+
+            const childMember = members.find((m) => m._id.toString() === childId);
+            if (childMember) {
+              const childHasSpouse = (spousesByMember.get(childId)?.size ?? 0) > 0;
+              const childHasChildren = (childrenByMember.get(childId)?.size ?? 0) > 0;
+              // If child has both spouse and child, they will get their own dedicated branch
+              if (!childHasSpouse || !childHasChildren) {
+                if (!childMember.branchIds.some((b) => b.toString() === branchOid.toString())) {
+                  childMember.branchIds.push(branchOid);
+                  await childMember.save();
+                }
+                const grandChildren = childrenByMember.get(childId);
+                if (grandChildren) {
+                  queue.push(...Array.from(grandChildren));
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error during automatic branch creation/sync:', err);
+    }
+  }
 }
 
 export const branchService = new BranchService();

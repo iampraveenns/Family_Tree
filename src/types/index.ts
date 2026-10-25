@@ -49,6 +49,8 @@ export interface FamilyMember {
   branchName?: string;
   memoryCount?: number;
   isLinkedToUser?: boolean;
+  linkedUserId?: string;
+  registeredEmail?: string;
 }
 
 export type Member = FamilyMember;
@@ -153,6 +155,7 @@ export interface Memory {
   relatedMemberIds?: string[];
   mediaUrl?: string;
   videoUrl?: string;
+  audioUrl?: string;
 }
 
 export interface MemoryCollection {

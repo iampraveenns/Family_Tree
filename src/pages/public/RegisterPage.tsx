@@ -82,8 +82,8 @@ export const RegisterPage: React.FC = () => {
           json?.error?.message ||
           json?.message ||
           (activeTab === 'signin'
-            ? 'Invalid email or password. Please verify your registered account credentials.'
-            : 'Registration failed. Password must be at least 8 characters with letters and numbers.');
+            ? 'Invalid email or password. Please verify your credentials or enter at least 4 characters.'
+            : 'Registration failed. Please enter at least 4 characters for your password.');
         setErrorMessage(errorText);
       }
     } catch {
@@ -238,7 +238,7 @@ export const RegisterPage: React.FC = () => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
+              placeholder="Enter your password"
               leftIcon={<Lock className="w-3.5 h-3.5 text-slate-400" />}
               required
             />

@@ -316,8 +316,8 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
           try {
             localStorage.removeItem(STORAGE_ACTIVE_FAMILY_KEY);
           } catch {}
-          const available = get().availableFamilies;
-          const fallback = available.find((f) => f.id !== famId) || (available.length > 0 ? available[0] : null);
+          const refreshed = await get().fetchAvailableFamilies();
+          const fallback = refreshed.find((f) => f.id !== famId) || (refreshed.length > 0 ? refreshed[0] : null);
           if (fallback && fallback.id !== famId) {
             set({ activeFamilyId: fallback.id, currentFamily: fallback });
             try {

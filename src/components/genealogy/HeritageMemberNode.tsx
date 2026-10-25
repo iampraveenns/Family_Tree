@@ -28,6 +28,9 @@ export interface HeritageMemberNodeData {
   isSecondarySpouse?: boolean;
   hideRelationshipActions?: boolean;
   canEdit?: boolean;
+  canAddRelatives?: boolean;
+  isUserSelfNode?: boolean;
+  isRootNode?: boolean;
   marriageDate?: string | null;
   onSelect?: (member: FamilyMember) => void;
   onHover?: (id: string | null) => void;
@@ -196,6 +199,9 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
     isSecondarySpouse = false,
     hideRelationshipActions = false,
     canEdit = true,
+    canAddRelatives,
+    isUserSelfNode = false,
+    isRootNode = false,
     onSelect,
     onHover,
     onAddRelative,
@@ -207,7 +213,8 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
     onUploadMemory,
   } = data;
 
-  const shouldHideActions = Boolean(hideRelationshipActions || isSecondarySpouse);
+  const effectiveCanAddRelatives = canAddRelatives !== undefined ? canAddRelatives : (canEdit && !isUserSelfNode);
+  const shouldHideActions = Boolean(hideRelationshipActions || isSecondarySpouse || !effectiveCanAddRelatives);
 
   // Subtle branch accent color mapping using harmonious blue shades
   const getBranchConfig = () => {
@@ -515,7 +522,16 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
               data-testid={`node-gen-badge-${member.id}`}
               className="px-2 py-0.5 rounded-md bg-[#2563EB]/10 text-[#17233C] border border-[#B8D4FF] text-[10px] font-bold tracking-tight uppercase shrink-0 shadow-2xs"
             >
-              {`Gen ${member.generation || 1}`}
+              {isRootNode ? `Gen ${member.generation || 1} • Root` : `Gen ${member.generation || 1}`}
+            </span>
+          )}
+          {isUserSelfNode && (
+            <span
+              data-testid={`node-self-badge-${member.id}`}
+              className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300 text-[9.5px] font-bold tracking-tight shrink-0 shadow-2xs"
+              title="Matched authenticated account: You can edit your profile"
+            >
+              You
             </span>
           )}
           {hasCustomBranch && (

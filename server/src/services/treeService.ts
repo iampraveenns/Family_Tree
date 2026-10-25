@@ -1,6 +1,7 @@
 import { memberRepository } from '../repositories/memberRepository.ts';
 import { relationshipRepository } from '../repositories/relationshipRepository.ts';
 import { branchRepository } from '../repositories/branchRepository.ts';
+import { branchService } from './branchService.ts';
 import { familyService } from './familyService.ts';
 import { ServiceContext } from './familyService.ts';
 
@@ -33,6 +34,8 @@ export interface NormalizedTreeData {
     profilePhoto?: string;
     generation: number;
     branchIds: string[];
+    linkedUserId?: string;
+    registeredEmail?: string;
   }>;
   relationships: Array<{
     id: string;
@@ -59,6 +62,9 @@ export class TreeService {
   async getFamilyTree(familyId: string, context?: ServiceContext): Promise<NormalizedTreeData> {
     const family = await familyService.getFamilyById(familyId, context);
     const resolvedFamilyId = family._id.toString();
+
+    // Auto-create/sync dedicated branches for any member with both a spouse and a child
+    await branchService.syncAutomaticBranches(resolvedFamilyId, context);
 
     const [members, relationships, branches] = await Promise.all([
       memberRepository.findAllByFamily(resolvedFamilyId),
@@ -95,6 +101,8 @@ export class TreeService {
         profilePhoto: m.profilePhoto,
         generation: m.generation || 1,
         branchIds: (m.branchIds || []).map((b) => b.toString()),
+        linkedUserId: (m as any).linkedUserId ? (m as any).linkedUserId.toString() : undefined,
+        registeredEmail: (m as any).registeredEmail || (m as any).email,
       })),
       relationships: relationships.map((r) => ({
         id: r._id.toString(),

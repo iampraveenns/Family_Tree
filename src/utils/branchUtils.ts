@@ -69,8 +69,11 @@ export function resolveDynamicBranches(
     ) {
       return m.branchName.trim();
     }
-    const cleanFirst = (m.firstName || m.displayName || 'Family').trim();
-    return cleanFirst.toLowerCase().endsWith('branch') ? cleanFirst : `${cleanFirst} Branch`;
+    const cleanName = (m.displayName || `${m.firstName} ${m.lastName}`).trim() || m.firstName || 'Family';
+    if (cleanName.toLowerCase().endsWith('branch')) {
+      return cleanName;
+    }
+    return `${cleanName}'s Family Branch`;
   };
 
   // Find root ancestors (Generation 1 or members with no parents in the tree)
@@ -81,7 +84,7 @@ export function resolveDynamicBranches(
 
   // If root members exist, assign root branch
   const primaryRoot = rootMembers.find((m) => m.gender === 'MALE') || rootMembers[0] || members[0];
-  const rootBranchName = primaryRoot ? makeBranchName(primaryRoot) : 'Main Branch';
+  const rootBranchName = primaryRoot ? makeBranchName(primaryRoot) : 'Main Family Branch';
 
   rootMembers.forEach((rm) => {
     branchAssignments.set(rm.id, rootBranchName);
@@ -91,7 +94,7 @@ export function resolveDynamicBranches(
     }
   });
 
-  // Married couples where at least one partner is a child (has parents or generation >= 2)
+  // Married couples where at least one partner is a child (has parents or generation >= 2) or has children
   const processedCouples = new Set<string>();
 
   members.forEach((m) => {
@@ -107,15 +110,19 @@ export function resolveDynamicBranches(
 
     const mParents = childToParents.get(m.id) || [];
     const spouseParents = childToParents.get(spouseId) || [];
+    const mChildren = parentToChildren.get(m.id) || [];
+    const spouseChildren = parentToChildren.get(spouseId) || [];
 
+    const hasChildren = mChildren.length > 0 || spouseChildren.length > 0;
     const isChildCouple =
       mParents.length > 0 ||
       spouseParents.length > 0 ||
       (m.generation && m.generation >= 2) ||
-      (spouseMember.generation && spouseMember.generation >= 2);
+      (spouseMember.generation && spouseMember.generation >= 2) ||
+      hasChildren;
 
     if (isChildCouple) {
-      // Lineage child is the one with parents in tree or higher generation / has custom branch
+      // Lineage member is the one with parents in tree or higher generation / has custom branch / primary parent
       let lineageChild = m;
       let incomingSpouse = spouseMember;
       if (spouseParents.length > 0 && mParents.length === 0) {
@@ -128,7 +135,7 @@ export function resolveDynamicBranches(
         }
       }
 
-      // Group branch name
+      // Dedicated branch named after that member (e.g., [Member Name]'s Family Branch)
       const coupleBranchName = makeBranchName(lineageChild);
 
       branchAssignments.set(lineageChild.id, coupleBranchName);
