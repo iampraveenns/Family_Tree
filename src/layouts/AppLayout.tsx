@@ -14,8 +14,8 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#F8FAFC] text-[#0F172A] antialiased select-none">
-      {/* Sleek Minimal Header for Family Tree - All Clean Light Styling */}
-      <header className="h-14 border-b border-[#E2E8F0] bg-white flex items-center justify-between px-4 sm:px-6 shrink-0 z-30 shadow-xs">
+      {/* Sleek Minimal Header for Family Tree - All Clean Light Styling with Top-Priority Stacking Context */}
+      <header className="h-14 border-b border-[#E2E8F0] bg-white flex items-center justify-between px-4 sm:px-6 shrink-0 relative z-[9999] overflow-visible shadow-xs">
         {/* Left: Brand Application Name & Active Role Indicator */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -28,8 +28,8 @@ export const AppLayout: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Notification Bell (directly to left of Sign Out) & Sign Out */}
-        <div className="flex items-center gap-2">
+        {/* Right: Notification Bell (directly to left of Sign Out) & Sign Out - Top Priority Stacking */}
+        <div className="flex items-center gap-2 relative z-[9999] overflow-visible">
           <NotificationBell />
 
           <button

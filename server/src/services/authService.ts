@@ -171,31 +171,8 @@ export class AuthService {
   async login(data: { email: string; password: string; ip?: string; userAgent?: string }) {
     const email = data.email.toLowerCase().trim();
 
-    let user = await userRepository.findByEmail(email);
+    const user = await userRepository.findByEmail(email);
     if (!user) {
-      // Seamless first-time onboarding / post-restart recovery:
-      // If user logs in with email and password, auto-provision their account
-      if (data.password && data.password.trim().length >= 4) {
-        const rawPrefix = email.split('@')[0].replace(/[0-9]/g, '');
-        const nameParts = (rawPrefix || email.split('@')[0]).split(/[._-]/).filter(Boolean);
-        const autoName =
-          nameParts.map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' ') || 'Family Member';
-
-        logger.info({ email, autoName }, 'Auto-provisioning user account from sign-in credentials');
-        const regResult = await this.register({
-          name: autoName,
-          email,
-          password: data.password,
-        });
-
-        return {
-          user: regResult.user,
-          memberships: await membershipRepository.findByUser(regResult.user.id),
-          accessToken: regResult.accessToken,
-          refreshToken: regResult.refreshToken,
-        };
-      }
-
       await auditService.log(
         undefined,
         'unauthenticated',
@@ -205,39 +182,31 @@ export class AuthService {
         {
           attempt: 'LOGIN_FAILURE',
           email,
-          reason: 'User not found',
+          reason: 'User not registered',
           ip: data.ip,
           userAgent: data.userAgent,
         }
       );
-      throw new UnauthorizedError('Invalid email or password. Please provide at least 4 characters for your password.');
+      throw new UnauthorizedError('Account not registered or invalid credentials. Please sign up first.');
     }
 
     const isValidPassword = await SecurityUtils.comparePassword(data.password, user.passwordHash);
     if (!isValidPassword) {
-      // Auto-heal credential: If user enters an updated password, refresh passwordHash cleanly
-      if (data.password && data.password.trim().length >= 4) {
-        const newHash = await SecurityUtils.hashPassword(data.password);
-        user.passwordHash = newHash;
-        await user.save();
-        logger.info({ email }, 'Password auto-healed and updated for user account');
-      } else {
-        await auditService.log(
-          undefined,
-          user._id.toString(),
-          AuditAction.SECURITY_VIOLATION,
-          'User',
-          user._id.toString(),
-          {
-            attempt: 'LOGIN_FAILURE',
-            email,
-            reason: 'Invalid credentials',
-            ip: data.ip,
-            userAgent: data.userAgent,
-          }
-        );
-        throw new UnauthorizedError('Invalid email or password');
-      }
+      await auditService.log(
+        undefined,
+        user._id.toString(),
+        AuditAction.SECURITY_VIOLATION,
+        'User',
+        user._id.toString(),
+        {
+          attempt: 'LOGIN_FAILURE',
+          email,
+          reason: 'Invalid credentials',
+          ip: data.ip,
+          userAgent: data.userAgent,
+        }
+      );
+      throw new UnauthorizedError('Account not registered or invalid credentials. Please sign up first.');
     }
 
     if (user.status === UserStatus.SUSPENDED) {

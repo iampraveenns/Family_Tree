@@ -97,7 +97,7 @@ export const NotificationBell: React.FC = () => {
   };
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative z-[9999] overflow-visible" ref={containerRef}>
       {/* Bell Icon Button */}
       <button
         type="button"
@@ -115,9 +115,9 @@ export const NotificationBell: React.FC = () => {
         )}
       </button>
 
-      {/* Notifications Popover Dropdown */}
+      {/* Notifications Popover Dropdown with Highest Priority Stacking Context */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl bg-white border border-[#CBD5E1] shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl bg-white border border-[#CBD5E1] shadow-2xl z-[9999] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-[#E2E8F0] bg-slate-50/70">
             <div className="flex items-center gap-2">

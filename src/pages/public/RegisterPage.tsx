@@ -82,7 +82,7 @@ export const RegisterPage: React.FC = () => {
           json?.error?.message ||
           json?.message ||
           (activeTab === 'signin'
-            ? 'Invalid email or password. Please verify your credentials or enter at least 4 characters.'
+            ? 'Account not registered or invalid credentials. Please sign up first.'
             : 'Registration failed. Please enter at least 4 characters for your password.');
         setErrorMessage(errorText);
       }

@@ -491,10 +491,21 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
 
       const finalBranches = Array.from(dynamicBranchMap.values());
 
+      // Normalize member branchId and branchIds to match the final branch IDs
+      const finalMembers = resolvedMembers.map((m) => {
+        const matchingBranch = m.branchName ? dynamicBranchMap.get(m.branchName) : undefined;
+        const resolvedId = matchingBranch ? matchingBranch.id : (m.branchId || `branch-${(m.branchName || 'main').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+        return {
+          ...m,
+          branchId: resolvedId,
+          branchIds: [resolvedId],
+        };
+      });
+
       set({
         activeFamilyId: mappedFamily.id,
         currentFamily: mappedFamily,
-        members: resolvedMembers,
+        members: finalMembers,
         branches: finalBranches,
         relationships: mappedRelationships,
         isLoading: false,

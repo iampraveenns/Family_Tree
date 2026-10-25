@@ -516,8 +516,11 @@ export class BranchService {
         }
       }
 
+      // Sort members by generation ascending so parent branches are established before child branches override them
+      const sortedMembers = [...members].sort((a, b) => (a.generation || 1) - (b.generation || 1));
+
       // Check each member: does this person have both a spouse and a child?
-      for (const member of members) {
+      for (const member of sortedMembers) {
         const memId = member._id.toString();
         const memberSpouses = spousesByMember.get(memId);
         const memberChildren = childrenByMember.get(memId);
@@ -548,30 +551,33 @@ export class BranchService {
               createdBy: context?.userId || 'system',
               visibility: BranchVisibility.FAMILY,
             });
+          } else if (branch.name !== branchName) {
+            branch.name = branchName;
+            await branch.save();
           }
 
           const branchOid = branch._id;
 
-          // Assign branch to this member
-          let memberUpdated = false;
-          if (!member.branchIds.some((b) => b.toString() === branchOid.toString())) {
-            member.branchIds.push(branchOid);
-            memberUpdated = true;
-          }
-          if (memberUpdated) {
+          // 1. Immediate Reassignment on the member themselves (overwrite inherited parent branch)
+          if (!member.branchIds || member.branchIds.length !== 1 || member.branchIds[0].toString() !== branchOid.toString()) {
+            member.branchIds = [branchOid];
+            (member as any).branchName = branchName;
             await member.save();
           }
 
-          // Assign branch to spouse(s)
+          // 2. Immediate Reassignment on spouse(s)
           for (const spouseId of memberSpouses!) {
             const spouseMember = members.find((m) => m._id.toString() === spouseId);
-            if (spouseMember && !spouseMember.branchIds.some((b) => b.toString() === branchOid.toString())) {
-              spouseMember.branchIds.push(branchOid);
-              await spouseMember.save();
+            if (spouseMember) {
+              if (!spouseMember.branchIds || spouseMember.branchIds.length !== 1 || spouseMember.branchIds[0].toString() !== branchOid.toString()) {
+                spouseMember.branchIds = [branchOid];
+                (spouseMember as any).branchName = branchName;
+                await spouseMember.save();
+              }
             }
           }
 
-          // Assign branch to children (and propagate to descendants if descendant does not have their own spouse+child branch)
+          // 3. Immediate Reassignment on direct children (and descendants unless child has their own spouse+child)
           const queue = Array.from(memberChildren!);
           const visited = new Set<string>();
           while (queue.length > 0) {
@@ -583,10 +589,11 @@ export class BranchService {
             if (childMember) {
               const childHasSpouse = (spousesByMember.get(childId)?.size ?? 0) > 0;
               const childHasChildren = (childrenByMember.get(childId)?.size ?? 0) > 0;
-              // If child has both spouse and child, they will get their own dedicated branch
+              // If child does not have their own spouse+child, overwrite to parent's branch
               if (!childHasSpouse || !childHasChildren) {
-                if (!childMember.branchIds.some((b) => b.toString() === branchOid.toString())) {
-                  childMember.branchIds.push(branchOid);
+                if (!childMember.branchIds || childMember.branchIds.length !== 1 || childMember.branchIds[0].toString() !== branchOid.toString()) {
+                  childMember.branchIds = [branchOid];
+                  (childMember as any).branchName = branchName;
                   await childMember.save();
                 }
                 const grandChildren = childrenByMember.get(childId);

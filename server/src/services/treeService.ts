@@ -34,6 +34,8 @@ export interface NormalizedTreeData {
     profilePhoto?: string;
     generation: number;
     branchIds: string[];
+    branchId?: string;
+    branchName?: string;
     linkedUserId?: string;
     registeredEmail?: string;
   }>;
@@ -72,6 +74,9 @@ export class TreeService {
       branchRepository.findByFamilyId(resolvedFamilyId),
     ]);
 
+    const branchMap = new Map<string, string>();
+    branches.forEach((b) => branchMap.set(b._id.toString(), b.name));
+
     return {
       family: {
         id: family._id.toString(),
@@ -80,30 +85,36 @@ export class TreeService {
         originPlace: family.originPlace,
         motto: family.motto,
       },
-      members: members.map((m) => ({
-        id: m._id.toString(),
-        familyId: m.familyId.toString(),
-        firstName: m.firstName,
-        middleName: m.middleName,
-        lastName: m.lastName,
-        displayName: m.displayName || `${m.firstName} ${m.lastName}`.trim(),
-        gender: m.gender,
-        dateOfBirth: m.dateOfBirth,
-        dateOfDeath: m.dateOfDeath,
-        isLiving: m.isLiving,
-        birthPlace: m.birthPlace,
-        deathPlace: m.deathPlace,
-        houseName: (m as any).houseName,
-        location: (m as any).location || m.birthPlace,
-        occupation: m.occupation,
-        education: m.education,
-        biography: m.biography,
-        profilePhoto: m.profilePhoto,
-        generation: m.generation || 1,
-        branchIds: (m.branchIds || []).map((b) => b.toString()),
-        linkedUserId: (m as any).linkedUserId ? (m as any).linkedUserId.toString() : undefined,
-        registeredEmail: (m as any).registeredEmail || (m as any).email,
-      })),
+      members: members.map((m) => {
+        const primaryBranchId = (m.branchIds && m.branchIds.length > 0) ? m.branchIds[0].toString() : undefined;
+        const branchName = primaryBranchId ? branchMap.get(primaryBranchId) : (m as any).branchName;
+        return {
+          id: m._id.toString(),
+          familyId: m.familyId.toString(),
+          firstName: m.firstName,
+          middleName: m.middleName,
+          lastName: m.lastName,
+          displayName: m.displayName || `${m.firstName} ${m.lastName}`.trim(),
+          gender: m.gender,
+          dateOfBirth: m.dateOfBirth,
+          dateOfDeath: m.dateOfDeath,
+          isLiving: m.isLiving,
+          birthPlace: m.birthPlace,
+          deathPlace: m.deathPlace,
+          houseName: (m as any).houseName,
+          location: (m as any).location || m.birthPlace,
+          occupation: m.occupation,
+          education: m.education,
+          biography: m.biography,
+          profilePhoto: m.profilePhoto,
+          generation: m.generation || 1,
+          branchIds: (m.branchIds || []).map((b) => b.toString()),
+          branchId: primaryBranchId,
+          branchName: branchName,
+          linkedUserId: (m as any).linkedUserId ? (m as any).linkedUserId.toString() : undefined,
+          registeredEmail: (m as any).registeredEmail || (m as any).email,
+        };
+      }),
       relationships: relationships.map((r) => ({
         id: r._id.toString(),
         familyId: r.familyId.toString(),

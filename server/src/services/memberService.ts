@@ -221,6 +221,14 @@ export class MemberService {
       { displayName: member.displayName }
     );
 
+    // Real-time automatic branch synchronization
+    try {
+      const { branchService } = await import('./branchService.ts');
+      await branchService.syncAutomaticBranches(familyId, context);
+    } catch (syncErr) {
+      console.warn('Real-time branch sync note during member creation:', syncErr);
+    }
+
     return member;
   }
 
@@ -324,7 +332,8 @@ export class MemberService {
     // Secure Self-Profile Editing (JWT / Account-to-Node Matching)
     if (context?.userId && Types.ObjectId.isValid(context.userId)) {
       const membership = await membershipRepository.findByUserAndFamily(context.userId, effectiveFamilyId);
-      const isRoleAdmin = membership ? normalizeRole(membership.role) === Role.ADMIN : false;
+      const isOwner = Boolean(targetFamily.createdBy && targetFamily.createdBy.toString() === context.userId);
+      const isRoleAdmin = isOwner || (membership ? normalizeRole(membership.role) === Role.ADMIN : false);
       if (!isRoleAdmin) {
         const isSelfNode = Boolean(
           (existing.linkedUserId && existing.linkedUserId.toString() === context.userId) ||

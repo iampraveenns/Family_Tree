@@ -187,7 +187,16 @@ export function calculateTreeLayout(
   // Filter members if branch is selected (while keeping spouses/children if relevant)
   const activeMembers = validMembers.filter((m) => {
     if (!selectedBranch) return true;
-    return m.branchId === selectedBranch;
+    return (
+      m.branchId === selectedBranch ||
+      (m.branchIds && m.branchIds.includes(selectedBranch)) ||
+      m.branchName === selectedBranch ||
+      (Boolean(m.branchName && selectedBranch) && (
+        m.branchName!.toLowerCase().trim() === selectedBranch.toLowerCase().trim() ||
+        selectedBranch.toLowerCase().includes(m.branchName!.toLowerCase()) ||
+        m.branchName!.toLowerCase().includes(selectedBranch.toLowerCase())
+      ))
+    );
   });
 
   if (activeMembers.length === 0) {

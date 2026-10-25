@@ -63,7 +63,7 @@ export class NotificationRepository {
         recipientUserId: new Types.ObjectId(userId),
       },
       { isRead: true, readAt: new Date() },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 

@@ -43,7 +43,7 @@ export class BranchRepository {
 
   async update(id: string | Types.ObjectId, data: Partial<IBranch>): Promise<IBranch | null> {
     if (!Types.ObjectId.isValid(id)) return null;
-    return Branch.findByIdAndUpdate(id, { $set: data }, { new: true, runValidators: true }).exec();
+    return Branch.findByIdAndUpdate(id, { $set: data }, { returnDocument: 'after', runValidators: true }).exec();
   }
 
   async delete(id: string | Types.ObjectId): Promise<boolean> {
