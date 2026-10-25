@@ -46,6 +46,7 @@ export interface FamilyMember {
   displayOrder?: number | null;
   createdAt?: string;
   branchId?: string;
+  branchIds?: string[];
   branchName?: string;
   memoryCount?: number;
   isLinkedToUser?: boolean;
