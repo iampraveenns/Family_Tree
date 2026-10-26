@@ -16,6 +16,17 @@ async function bootstrap() {
   // Dynamic data architecture: Family trees build dynamically from real user accounts.
   logger.info('Dynamic data architecture active: No hardcoded trees seeded.');
 
+  // Ensure default demo users exist for testing
+  try {
+    const { authService } = await import('./server/src/services/authService.ts');
+    const { Role } = await import('./server/src/constants/index.ts');
+    await authService.ensureDemoUser(Role.ADMIN);
+    await authService.ensureDemoUser(Role.VIEWER);
+    logger.info('Demo user accounts verified and ready.');
+  } catch (demoErr) {
+    logger.info({ demoErr }, 'Demo accounts initialization note');
+  }
+
   // Clear memory posts to ensure initial memories count is 0 as requested
   try {
     const { Memory } = await import('./server/src/models/Memory.ts');

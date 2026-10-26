@@ -93,6 +93,42 @@ export const RegisterPage: React.FC = () => {
     }
   };
 
+  const handleQuickDemoLogin = async (demoEmail: string, demoPass: string) => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setEmail(demoEmail);
+    setPassword(demoPass);
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ email: demoEmail, password: demoPass }),
+      });
+
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success && json?.data?.accessToken) {
+        setAuthTokens(json.data.accessToken, json.data.refreshToken);
+        await useFamilyStore.getState().fetchFamilyTree();
+        const currentFam = useFamilyStore.getState().currentFamily;
+        if (currentFam?.id) {
+          await useCollaborationStore.getState().fetchPermissions(currentFam.id);
+        }
+        navigate('/family/tree');
+      } else {
+        setErrorMessage(json?.error?.message || json?.message || 'Demo sign in failed.');
+      }
+    } catch {
+      setErrorMessage('Unable to connect to the authentication server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleRegisterRelativeAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsRegisteringRelative(true);
@@ -188,9 +224,23 @@ export const RegisterPage: React.FC = () => {
           </div>
 
           {errorMessage && (
-            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-              <span>{errorMessage}</span>
+            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex flex-col gap-2">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <span>{errorMessage}</span>
+              </div>
+              {activeTab === 'signin' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('register');
+                    setErrorMessage(null);
+                  }}
+                  className="self-start text-[11px] font-bold text-[#2563EB] hover:underline cursor-pointer bg-blue-50/80 px-2.5 py-1 rounded-lg border border-blue-200"
+                >
+                  Need an account? Click here to Register
+                </button>
+              )}
             </div>
           )}
 
@@ -253,8 +303,41 @@ export const RegisterPage: React.FC = () => {
             </Button>
           </form>
 
+          {/* Quick Demo Access Buttons */}
+          <div className="mt-5 pt-4 border-t border-[#E2E8F0]">
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center mb-2.5">
+              Quick Demo Access
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleQuickDemoLogin('dev@familyroots.heritage', 'FamilyRoots#2026')}
+                disabled={isLoading}
+                className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-left transition-colors cursor-pointer"
+              >
+                <div className="text-[11px] font-bold text-[#1D4ED8] flex items-center gap-1">
+                  <KeyRound className="w-3 h-3 text-[#2563EB]" />
+                  <span>Admin (Kiran)</span>
+                </div>
+                <div className="text-[10px] text-slate-500 truncate mt-0.5">dev@familyroots.heritage</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickDemoLogin('viewer@familyroots.heritage', 'FamilyRoots#2026')}
+                disabled={isLoading}
+                className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-left transition-colors cursor-pointer"
+              >
+                <div className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                  <KeyRound className="w-3 h-3 text-slate-500" />
+                  <span>Viewer (Aarav)</span>
+                </div>
+                <div className="text-[10px] text-slate-500 truncate mt-0.5">viewer@familyroots.heritage</div>
+              </button>
+            </div>
+          </div>
+
           {/* Helper: Register a relative's account in advance */}
-          <div className="mt-5 pt-4 border-t border-[#E2E8F0] text-center">
+          <div className="mt-4 pt-3 border-t border-[#E2E8F0] text-center">
             <button
               type="button"
               onClick={() => setIsRelativeModalOpen(true)}

@@ -73,7 +73,7 @@ export class MemberRepository {
 
   async update(id: string | Types.ObjectId, data: Partial<IFamilyMember>): Promise<IFamilyMember | null> {
     if (!Types.ObjectId.isValid(id)) return null;
-    return FamilyMember.findByIdAndUpdate(id, { $set: data }, { new: true, runValidators: true }).exec();
+    return FamilyMember.findByIdAndUpdate(id, { $set: data }, { returnDocument: 'after', runValidators: true }).exec();
   }
 
   async delete(id: string | Types.ObjectId): Promise<boolean> {

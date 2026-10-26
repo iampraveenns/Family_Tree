@@ -12,13 +12,22 @@ export const errorHandler = (
   next: NextFunction
 ): void => {
   if (err instanceof AppError) {
-    logger.warn({
-      code: err.code,
-      message: err.message,
-      statusCode: err.statusCode,
-      details: err.details,
-      path: req.originalUrl,
-    }, 'Operational error handled');
+    if (err.statusCode >= 500) {
+      logger.error({
+        code: err.code,
+        message: err.message,
+        statusCode: err.statusCode,
+        details: err.details,
+        path: req.originalUrl,
+      }, 'Operational server error handled');
+    } else {
+      logger.info({
+        code: err.code,
+        message: err.message,
+        statusCode: err.statusCode,
+        path: req.originalUrl,
+      }, 'Client error response sent');
+    }
 
     sendError(res, err.code, err.message, err.statusCode, err.details);
     return;

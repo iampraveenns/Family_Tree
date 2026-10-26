@@ -77,7 +77,7 @@ export class RelationshipRepository {
 
   async update(id: string | Types.ObjectId, data: Partial<IRelationship>): Promise<IRelationship | null> {
     if (!Types.ObjectId.isValid(id)) return null;
-    return Relationship.findByIdAndUpdate(id, { $set: data }, { new: true }).exec();
+    return Relationship.findByIdAndUpdate(id, { $set: data }, { returnDocument: 'after' }).exec();
   }
 
   async delete(id: string | Types.ObjectId): Promise<boolean> {

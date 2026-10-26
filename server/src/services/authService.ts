@@ -171,6 +171,13 @@ export class AuthService {
   async login(data: { email: string; password: string; ip?: string; userAgent?: string }) {
     const email = data.email.toLowerCase().trim();
 
+    // If logging in with demo account, ensure demo credentials exist
+    if (email === 'dev@familyroots.heritage') {
+      await this.ensureDemoUser(Role.ADMIN);
+    } else if (email === 'viewer@familyroots.heritage') {
+      await this.ensureDemoUser(Role.VIEWER);
+    }
+
     const user = await userRepository.findByEmail(email);
     if (!user) {
       await auditService.log(

@@ -49,7 +49,7 @@ export class MemoryRepository {
 
   async update(id: string | Types.ObjectId, data: Partial<IMemory>): Promise<IMemory | null> {
     if (!Types.ObjectId.isValid(id)) return null;
-    return Memory.findByIdAndUpdate(id, { $set: data }, { new: true, runValidators: true })
+    return Memory.findByIdAndUpdate(id, { $set: data }, { returnDocument: 'after', runValidators: true })
       .populate('createdBy', 'displayName email avatar')
       .populate('addedByMemberId', 'firstName lastName displayName profilePhoto gender')
       .populate('memberIds', 'firstName lastName displayName profilePhoto gender isLiving dateOfBirth dateOfDeath generation')

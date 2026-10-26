@@ -46,7 +46,7 @@ export class MediaRepository {
 
   async update(id: string | Types.ObjectId, data: Partial<IMedia>): Promise<IMedia | null> {
     if (!Types.ObjectId.isValid(id)) return null;
-    return Media.findByIdAndUpdate(id, { $set: data }, { new: true });
+    return Media.findByIdAndUpdate(id, { $set: data }, { returnDocument: 'after' });
   }
 
   async delete(id: string | Types.ObjectId): Promise<boolean> {

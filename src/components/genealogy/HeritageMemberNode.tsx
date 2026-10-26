@@ -518,12 +518,22 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
         {/* Left top corner: Gen label (Gen 1, Gen 2, etc.) & Optional Branch - keep ONLY for member node, remove for spouse */}
         <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-1">
           {!isSecondarySpouse && (
-            <span
+            <button
+              type="button"
               data-testid={`node-gen-badge-${member.id}`}
-              className="px-2 py-0.5 rounded-md bg-[#2563EB]/10 text-[#17233C] border border-[#B8D4FF] text-[10px] font-bold tracking-tight uppercase shrink-0 shadow-2xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                if ((data as any).onSelectGeneration) {
+                  (data as any).onSelectGeneration(member.generation || 1);
+                } else if ((data as any).onFilterGeneration) {
+                  (data as any).onFilterGeneration(member.generation || 1);
+                }
+              }}
+              title={`Generation ${member.generation || 1}: Click to filter or inspect Generation ${member.generation || 1} members`}
+              className="px-2 py-0.5 rounded-md bg-[#2563EB]/10 hover:bg-[#2563EB]/20 text-[#17233C] border border-[#B8D4FF] hover:border-[#2563EB] text-[10px] font-bold tracking-tight uppercase shrink-0 shadow-2xs transition-all cursor-pointer"
             >
               {isRootNode ? `Gen ${member.generation || 1} • Root` : `Gen ${member.generation || 1}`}
-            </span>
+            </button>
           )}
           {isUserSelfNode && (
             <span

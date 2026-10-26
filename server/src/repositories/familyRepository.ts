@@ -42,7 +42,7 @@ export class FamilyRepository {
 
   async update(id: string | Types.ObjectId, data: Partial<IFamily>): Promise<IFamily | null> {
     if (!Types.ObjectId.isValid(id)) return null;
-    return Family.findByIdAndUpdate(id, { $set: data }, { new: true, runValidators: true }).exec();
+    return Family.findByIdAndUpdate(id, { $set: data }, { returnDocument: 'after', runValidators: true }).exec();
   }
 
   async delete(id: string | Types.ObjectId): Promise<boolean> {
