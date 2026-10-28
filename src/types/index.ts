@@ -325,6 +325,8 @@ export interface FamilyStoryChapter {
 }
 
 export type RoleType =
+  | 'SUPER_ADMIN'
+  | 'ADMIN'
   | 'FAMILY_OWNER'
   | 'FAMILY_ADMIN'
   | 'BRANCH_MANAGER'

@@ -120,40 +120,21 @@ const FamilyTreeInner: React.FC = () => {
   }, [currentFamily?.id, fetchFamilyTree, fetchPermissions, memories.length, events.length]);
 
   const [isAuthoritiesModalOpen, setIsAuthoritiesModalOpen] = useState(false);
-  const [isSwitchingRole, setIsSwitchingRole] = useState(false);
 
+  // Strictly lock user permissions to the authenticated session role (SUPER_ADMIN, ADMIN, or VIEWER)
   const isAdmin = useMemo(() => {
+    const userRole = typeof localStorage !== 'undefined' ? (localStorage.getItem('familyroots_user_role') || '').toUpperCase() : '';
+    if (userRole === 'SUPER_ADMIN') return true;
+    if (userRole === 'ADMIN') return true;
+    if (userRole === 'VIEWER') return false;
+
     if (!userPermissions) {
-      const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(SELECTED_ROLE_KEY) : null;
-      if (stored === 'VIEWER') return false;
-      return true;
+      return false;
     }
     const role = userPermissions.role ? String(userPermissions.role).toUpperCase() : '';
     if (role === 'VIEWER') return false;
-    return role === 'ADMIN' || userPermissions.capabilities?.canEditAllMembers === true;
+    return role === 'ADMIN' || role === 'SUPER_ADMIN' || userPermissions.capabilities?.canEditAllMembers === true;
   }, [userPermissions]);
-
-  const handleSwitchRole = async (targetRole: 'ADMIN' | 'VIEWER') => {
-    setIsSwitchingRole(true);
-    try {
-      await setRoleSession(targetRole);
-      const famId = currentFamily?.id || activeFamilyId;
-      if (famId) {
-        await fetchPermissions(famId);
-      }
-      await fetchFamilyTree();
-      success(
-        targetRole === 'ADMIN'
-          ? 'Switched to Family Admin: All editing and management options are now visible.'
-          : 'Switched to Family Viewer: Read-only tree active with defined view authorities.',
-        targetRole === 'ADMIN' ? 'Admin Mode Active' : 'Viewer Mode Active'
-      );
-    } catch {
-      toastError('Could not switch role. Please try again.');
-    } finally {
-      setIsSwitchingRole(false);
-    }
-  };
 
   const containerRef = useRef<HTMLDivElement>(null);
   const branchScrollRef = useRef<HTMLDivElement>(null);
@@ -317,9 +298,9 @@ const FamilyTreeInner: React.FC = () => {
           dateOfBirth: data.exactBirthDate || (data.birthYear ? `${data.birthYear}-01-01` : null),
           dateOfDeath: isLiving ? null : (data.deathDate?.trim() || null),
           occupation: data.occupation || undefined,
-          birthPlace: data.birthPlace || undefined,
-          houseName: data.houseName || undefined,
-          location: data.location || undefined,
+          birthPlace: data.birthPlace !== undefined ? data.birthPlace.trim() : undefined,
+          houseName: data.houseName !== undefined ? data.houseName.trim() : undefined,
+          location: data.location !== undefined ? data.location.trim() : undefined,
           profilePhoto: data.photoUrl || undefined,
           biography: data.biography || undefined,
           branchIds: (() => {
@@ -394,12 +375,12 @@ const FamilyTreeInner: React.FC = () => {
         await fetchFamilyTree(famId);
 
         const refreshedMembers = useFamilyStore.getState().members;
-        const refreshedMember = refreshedMembers.find((m) => m.id === memberId);
+        const refreshedMember = refreshedMembers.find((m) => m.id === targetMemberId || m.id === memberId);
         if (refreshedMember) {
-          if (selectedMember?.id === memberId) {
+          if (selectedMember?.id === memberId || selectedMember?.id === targetMemberId) {
             setSelectedMember(refreshedMember);
           }
-          if (drawerMember?.id === memberId) {
+          if (drawerMember?.id === memberId || drawerMember?.id === targetMemberId) {
             setDrawerMember(refreshedMember);
           }
         }
@@ -1769,38 +1750,6 @@ const FamilyTreeInner: React.FC = () => {
               <span>View Authorities</span>
             </button>
           )}
-
-          {/* Quick Role Switcher (Admin vs Viewer) */}
-          <div className="flex items-center rounded-xl bg-[#F1F5F9] p-0.5 border border-[#CBD5E1] text-xs">
-            <button
-              type="button"
-              disabled={isSwitchingRole}
-              onClick={() => handleSwitchRole('ADMIN')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                isAdmin
-                  ? 'bg-[#2563EB] text-white shadow-2xs'
-                  : 'text-[#64748B] hover:text-[#0F172A]'
-              }`}
-              title="Switch to Admin (Shows all tree editing options)"
-            >
-              <ShieldCheck className="w-3 h-3" />
-              <span>Admin</span>
-            </button>
-            <button
-              type="button"
-              disabled={isSwitchingRole}
-              onClick={() => handleSwitchRole('VIEWER')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                !isAdmin
-                  ? 'bg-[#0284C7] text-white shadow-2xs'
-                  : 'text-[#64748B] hover:text-[#0F172A]'
-              }`}
-              title="Switch to Viewer (Shows view authorities)"
-            >
-              <Eye className="w-3 h-3" />
-              <span>Viewer</span>
-            </button>
-          </div>
         </div>
       </div>
 
@@ -2164,7 +2113,19 @@ const FamilyTreeInner: React.FC = () => {
                         ))}
                       </div>
                     )}
-                    {activeDrawerMember.birthPlace && (
+                    {activeDrawerMember.houseName && (
+                      <div className="flex items-center gap-2 text-[#0F172A]">
+                        <MapPin className="w-3.5 h-3.5 text-[#2563EB] shrink-0" />
+                        <span>Housename: {activeDrawerMember.houseName}</span>
+                      </div>
+                    )}
+                    {activeDrawerMember.location && (
+                      <div className="flex items-center gap-2 text-[#0F172A]">
+                        <MapPin className="w-3.5 h-3.5 text-[#2563EB] shrink-0" />
+                        <span>Location: {activeDrawerMember.location}</span>
+                      </div>
+                    )}
+                    {activeDrawerMember.birthPlace && activeDrawerMember.birthPlace !== activeDrawerMember.location && (
                       <div className="flex items-center gap-2 text-[#0F172A]">
                         <MapPin className="w-3.5 h-3.5 text-[#2563EB] shrink-0" />
                         <span>Birthplace: {activeDrawerMember.birthPlace}</span>
@@ -2200,38 +2161,6 @@ const FamilyTreeInner: React.FC = () => {
                       </p>
                     </div>
                   </div>
-
-                  {(() => {
-                    const isDrawerMemberSelf = Boolean(
-                      activeDrawerMember && currentUser && (
-                        (activeDrawerMember.linkedUserId && activeDrawerMember.linkedUserId === currentUser.id) ||
-                        (currentUser.memberId && activeDrawerMember.id === currentUser.memberId) ||
-                        (activeDrawerMember.registeredEmail && currentUser.email && activeDrawerMember.registeredEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim()) ||
-                        ((activeDrawerMember as any).email && currentUser.email && (activeDrawerMember as any).email.toLowerCase().trim() === currentUser.email.toLowerCase().trim())
-                      )
-                    );
-
-                    if (isAdmin || isDrawerMemberSelf) {
-                      return (
-                        <div className="pt-1">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditModal(activeDrawerMember)}
-                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border-[1.5px] border-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1D4ED8] text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                            <span>{isDrawerMemberSelf && !isAdmin ? 'Edit Your Profile' : 'Edit Member Profile'}</span>
-                          </button>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div className="pt-1 text-[11px] text-[#64748B] italic text-center">
-                        View-only relative profile. You can edit your own profile node once matched.
-                      </div>
-                    );
-                  })()}
                 </div>
               )}
 
@@ -3025,23 +2954,15 @@ const FamilyTreeInner: React.FC = () => {
 
           {/* Action buttons */}
           <div className="pt-2 flex items-center justify-between border-t border-slate-200">
+            <span className="text-[11px] text-slate-500 italic">
+              Permissions are managed exclusively by your tree Admin & Super Admin.
+            </span>
             <button
               type="button"
               onClick={() => setIsAuthoritiesModalOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
             >
               Close
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsAuthoritiesModalOpen(false);
-                handleSwitchRole('ADMIN');
-              }}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Switch to Admin Mode (Enable All Options)</span>
             </button>
           </div>
         </div>

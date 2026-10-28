@@ -16,15 +16,13 @@ async function bootstrap() {
   // Dynamic data architecture: Family trees build dynamically from real user accounts.
   logger.info('Dynamic data architecture active: No hardcoded trees seeded.');
 
-  // Ensure default demo users exist for testing
+  // Initialize three-tier authentication, SQL database table, and pre-seeded accounts
   try {
     const { authService } = await import('./server/src/services/authService.ts');
-    const { Role } = await import('./server/src/constants/index.ts');
-    await authService.ensureDemoUser(Role.ADMIN);
-    await authService.ensureDemoUser(Role.VIEWER);
-    logger.info('Demo user accounts verified and ready.');
+    await authService.ensureThreeTierSeed();
+    logger.info('Three-tier authentication & SQLite database verified and ready.');
   } catch (demoErr) {
-    logger.info({ demoErr }, 'Demo accounts initialization note');
+    logger.info({ demoErr }, 'Three-tier initialization note');
   }
 
   // Clear memory posts to ensure initial memories count is 0 as requested

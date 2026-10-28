@@ -1,4 +1,5 @@
 export enum Role {
+  SUPER_ADMIN = 'SUPER_ADMIN',
   ADMIN = 'ADMIN',
   VIEWER = 'VIEWER',
   // Backward compatibility mappings
@@ -13,6 +14,9 @@ export enum Role {
 export function normalizeRole(role?: string | null): Role {
   if (!role) return Role.VIEWER;
   const upper = String(role).toUpperCase().trim();
+  if (upper === 'SUPER_ADMIN' || upper === 'SUPERADMIN') {
+    return Role.SUPER_ADMIN;
+  }
   if (
     upper === 'ADMIN' ||
     upper === 'FAMILY_OWNER' ||
@@ -25,6 +29,7 @@ export function normalizeRole(role?: string | null): Role {
 }
 
 export const RoleRank: Record<string, number> = {
+  [Role.SUPER_ADMIN]: 200,
   [Role.ADMIN]: 100,
   [Role.VIEWER]: 10,
   [Role.FAMILY_OWNER]: 100,
@@ -255,6 +260,7 @@ export enum AuditAction {
 }
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
+  [Role.SUPER_ADMIN]: Object.values(Permission),
   [Role.ADMIN]: Object.values(Permission),
   [Role.VIEWER]: [
     Permission.VIEW_FAMILY,

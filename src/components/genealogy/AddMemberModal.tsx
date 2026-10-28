@@ -101,9 +101,6 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
   const [dateOfBirth, setDateOfBirth] = useState(getInitialDob);
   const [deathDate, setDeathDate] = useState(() => editMember?.dateOfDeath?.slice(0, 10) || '');
   const [isLiving, setIsLiving] = useState(() => editMember?.isLiving ?? true);
-  const [registeredEmail, setRegisteredEmail] = useState(
-    () => (editMember as any)?.registeredEmail || (editMember as any)?.email || ''
-  );
   const [occupation, setOccupation] = useState(() => editMember?.occupation || '');
   const [birthPlace, setBirthPlace] = useState(() => editMember?.birthPlace || '');
   const [houseName, setHouseName] = useState(
@@ -123,55 +120,8 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
     () => Boolean(editMember?.biography || (editMember as any)?.notes)
   );
   const [formError, setFormError] = useState<string | null>(null);
-  const [showRegisterInline, setShowRegisterInline] = useState(false);
-  const [inlinePassword, setInlinePassword] = useState('Welcome123!');
-  const [isRegisteringInline, setIsRegisteringInline] = useState(false);
-  const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
-  const [inlineError, setInlineError] = useState<string | null>(null);
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const handleRegisterAccountInline = async () => {
-    if (!registeredEmail.trim()) {
-      setInlineError('Please enter the relative email address first.');
-      return;
-    }
-    if (!firstName.trim() || !lastName.trim()) {
-      setInlineError('Please fill in First and Last names above first.');
-      return;
-    }
-    if (!inlinePassword || inlinePassword.length < 8) {
-      setInlineError('Password must be at least 8 characters.');
-      return;
-    }
-    setIsRegisteringInline(true);
-    setInlineError(null);
-    setInlineSuccess(null);
-    try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          displayName: `${firstName.trim()} ${lastName.trim()}`,
-          name: `${firstName.trim()} ${lastName.trim()}`,
-          email: registeredEmail.trim().toLowerCase(),
-          password: inlinePassword,
-        }),
-      });
-      const json = await res.json().catch(() => null);
-      if (res.ok && json?.success) {
-        setInlineSuccess(`User account created for "${registeredEmail.trim()}"! Ready to add to tree.`);
-        setFormError(null);
-      } else {
-        const msg = json?.error?.message || json?.message || 'Failed to create user account.';
-        setInlineError(msg);
-      }
-    } catch {
-      setInlineError('Network error connecting to auth service.');
-    } finally {
-      setIsRegisteringInline(false);
-    }
-  };
 
   const handlePhotoFile = (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -338,8 +288,8 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
     e.preventDefault();
     if (isSubmitting) return;
 
-    if (!firstName.trim() || !lastName.trim()) {
-      setFormError('First and Last names are required.');
+    if (!firstName.trim() || !lastName.trim() || !dateOfBirth.trim()) {
+      setFormError('First Name, Last Name, and Date of Birth are mandatory.');
       return;
     }
 
@@ -368,11 +318,6 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
     const effectiveLiving = hasDeathDate ? false : isLiving;
     const effectiveDeathDate = effectiveLiving ? '' : deathDate.trim();
 
-    if (!editMember && effectiveLiving && !registeredEmail.trim()) {
-      setFormError('Cannot create member node: Living relatives strictly require a registered account in the authentication database before they can be added.');
-      return;
-    }
-
     setFormError(null);
     try {
 
@@ -387,7 +332,6 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         exactBirthDate: dateOfBirth.trim(),
         deathDate: effectiveDeathDate,
         isLiving: effectiveLiving,
-        registeredEmail: registeredEmail.trim() || undefined,
         occupation: occupation.trim(),
         birthPlace: birthPlace.trim(),
         houseName: houseName.trim(),
@@ -410,7 +354,6 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         setDateOfBirth('');
         setDeathDate('');
         setIsLiving(true);
-        setRegisteredEmail('');
         setOccupation('');
         setBirthPlace('');
         setHouseName('');
@@ -628,7 +571,8 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <Input
                 type="date"
-                label="Date of Birth"
+                label="Date of Birth *"
+                required
                 value={dateOfBirth}
                 onChange={(e) => setDateOfBirth(e.target.value)}
               />
@@ -899,7 +843,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               />
             </div>
 
-            {/* Life Status & Required Registered Account Email */}
+            {/* Life Status */}
             <div className="p-3 rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] space-y-2.5">
               <div className="flex items-center justify-between">
                 <div>
@@ -907,7 +851,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                     Life Status
                   </label>
                   <p className="text-[11px] text-[#64748B]">
-                    Universally linked to a registered JSON user account
+                    Specify whether this relative is currently living or an ancestor
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -939,92 +883,6 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                     Deceased / Ancestor
                   </button>
                 </div>
-              </div>
-
-              <div>
-                <Input
-                  type="email"
-                  label="Registered Account Email *"
-                  placeholder="e.g. arun@example.com"
-                  value={registeredEmail}
-                  onChange={(e) => {
-                    setRegisteredEmail(e.target.value);
-                    if (formError) setFormError(null);
-                    if (inlineError) setInlineError(null);
-                  }}
-                  required
-                />
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-[10.5px] text-[#64748B]">
-                    Every person added to the tree must have a registered account created via JSON authentication.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowRegisterInline((prev) => !prev);
-                      setInlineError(null);
-                      setInlineSuccess(null);
-                    }}
-                    className="text-[10.5px] font-semibold text-[#2563EB] hover:underline cursor-pointer shrink-0 ml-2"
-                  >
-                    {showRegisterInline ? 'Hide Account Creator' : '+ Register Account for this Relative'}
-                  </button>
-                </div>
-
-                {showRegisterInline && (
-                  <div className="mt-2.5 p-3 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-[#1E3A8A]">
-                      <UserPlus className="w-3.5 h-3.5 text-[#2563EB]" />
-                      <span>Instant JSON Account Registration for Relative</span>
-                    </div>
-                    <p className="text-[11px] text-slate-600">
-                      Creates the user account via JSON authentication and links it to this tree node.
-                    </p>
-
-                    {inlineSuccess && (
-                      <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-1.5 font-medium">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>{inlineSuccess}</span>
-                      </div>
-                    )}
-
-                    {inlineError && (
-                      <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
-                        {inlineError}
-                      </div>
-                    )}
-
-                    <div className="flex flex-col sm:flex-row gap-2 items-center">
-                      <div className="w-full sm:flex-1">
-                        <Input
-                          type="password"
-                          label="Initial Password"
-                          value={inlinePassword}
-                          onChange={(e) => setInlinePassword(e.target.value)}
-                          placeholder="Min 8 characters"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleRegisterAccountInline}
-                        disabled={isRegisteringInline}
-                        className="w-full sm:w-auto mt-4 px-3 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-60"
-                      >
-                        {isRegisteringInline ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Registering...</span>
-                          </>
-                        ) : (
-                          <>
-                            <UserPlus className="w-3.5 h-3.5" />
-                            <span>Create Account</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {!isLiving && (
@@ -1079,7 +937,8 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <Input
                 type="date"
-                label="Date of Birth"
+                label="Date of Birth *"
+                required
                 value={dateOfBirth}
                 onChange={(e) => setDateOfBirth(e.target.value)}
               />
@@ -1140,7 +999,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                 <span>
                   {showMoreDetails
                     ? 'Hide Additional Details'
-                    : 'More Details (Branch, Bio, Notes)'}
+                    : 'More Details (Biography, Notes)'}
                 </span>
                 {showMoreDetails ? (
                   <ChevronUp className="w-3.5 h-3.5" />
@@ -1157,24 +1016,6 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                     exit={{ opacity: 0, height: 0 }}
                     className="space-y-3 pt-3 overflow-hidden"
                   >
-                    <div>
-                      <label className="text-xs font-semibold text-[#334155] mb-1 block">
-                        Branch Assignment
-                      </label>
-                      <select
-                        value={branchId}
-                        onChange={(e) => setBranchId(e.target.value)}
-                        className="w-full rounded-xl border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0F172A] focus:ring-2 focus:ring-[#2563EB] focus:outline-hidden"
-                      >
-                        <option value="">Inherit Reference Branch</option>
-                        {branches.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
                     <div>
                       <label className="text-xs font-semibold text-[#334155] mb-1 block">
                         Biography

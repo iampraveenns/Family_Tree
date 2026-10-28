@@ -5,6 +5,7 @@ import familyRoutes from './familyRoutes.ts';
 import memoryRoutes from './memoryRoutes.ts';
 import mediaRoutes from './mediaRoutes.ts';
 import topLevelRoutes from './topLevelRoutes.ts';
+import { superAdminRoutes } from './superAdminRoutes.ts';
 
 const apiRouter = Router();
 
@@ -13,6 +14,7 @@ apiRouter.use('/auth', authRoutes);
 apiRouter.use('/families', familyRoutes);
 apiRouter.use('/memories', memoryRoutes);
 apiRouter.use('/media', mediaRoutes);
+apiRouter.use('/super-admin', superAdminRoutes);
 apiRouter.use('/', topLevelRoutes);
 
 export default apiRouter;

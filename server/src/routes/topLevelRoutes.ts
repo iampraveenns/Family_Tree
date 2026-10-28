@@ -86,6 +86,65 @@ router.patch('/members/:memberId', requireAuthentication, async (req: Request, r
   }
 });
 
+router.put('/members/:memberId', requireAuthentication, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { memberId } = req.params;
+    if (!Types.ObjectId.isValid(memberId)) {
+      throw new NotFoundError(`Member with ID '${memberId}' not found`);
+    }
+
+    const member = await memberRepository.findById(memberId);
+    if (!member) {
+      throw new NotFoundError(`Member with ID '${memberId}' not found`);
+    }
+
+    const familyIdStr = member.familyId.toString();
+    const membership = await membershipRepository.findByUserAndFamily(req.user!.userId, familyIdStr);
+    if (!membership || membership.status !== 'ACTIVE') {
+      throw new ForbiddenError('Access denied: You do not have permission to modify members of another family');
+    }
+
+    const authCheck = await authorizationService.canManageMember(
+      req.user!.userId,
+      familyIdStr,
+      memberId,
+      Permission.EDIT_MEMBER
+    );
+    if (!authCheck.allowed) {
+      throw new ForbiddenError(authCheck.reason || 'You do not have permission to edit this member');
+    }
+
+    const updated = await memberService.updateMember(familyIdStr, memberId, req.body, {
+      userId: req.user!.userId,
+    });
+    sendSuccess(res, updated, 'Member updated successfully');
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/members', requireAuthentication, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    let familyId = req.body.familyId || req.query.familyId;
+    if (!familyId) {
+      const memberships = await membershipRepository.findByUser(req.user!.userId);
+      if (memberships.length > 0) {
+        familyId = (memberships[0].familyId as any)?._id?.toString() || memberships[0].familyId.toString();
+      }
+    }
+    if (!familyId) {
+      throw new NotFoundError('Family ID is required to create a member');
+    }
+
+    const newMember = await memberService.createMember(familyId, req.body, {
+      userId: req.user!.userId,
+    });
+    sendSuccess(res, newMember, 'Member created successfully', 201);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.delete('/members/:memberId', requireAuthentication, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { memberId } = req.params;

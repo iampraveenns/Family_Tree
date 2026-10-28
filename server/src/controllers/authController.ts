@@ -3,13 +3,15 @@ import { authService } from '../services/authService.ts';
 import { sendSuccess } from '../utils/apiResponse.ts';
 import { Role } from '../constants/index.ts';
 
+import { ForbiddenError } from '../utils/errors.ts';
+
 export class AuthController {
-  async register(req: Request, res: Response, next: NextFunction) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async register(_req: Request, _res: Response, next: NextFunction) {
     try {
-      const name = req.body.name || req.body.displayName;
-      const { email, password, avatar } = req.body;
-      const result = await authService.register({ name, email, password, avatar });
-      sendSuccess(res, result, 'User registered successfully', 201);
+      throw new ForbiddenError(
+        'Public registration is disabled. All Admin and Viewer accounts must be provisioned exclusively by the Super Admin.'
+      );
     } catch (error) {
       next(error);
     }
@@ -68,19 +70,25 @@ export class AuthController {
       const ip = req.ip || req.socket.remoteAddress;
       const userAgent = req.get('user-agent');
       const requestedRole = ((req.query.role as string) || req.body?.role || 'ADMIN').toUpperCase();
-      const isViewer = requestedRole === 'VIEWER';
-      const role = isViewer ? Role.VIEWER : Role.ADMIN;
+      let role = Role.ADMIN;
+      let password = 'FamilyRoots#2026';
+      if (requestedRole === 'SUPER_ADMIN' || requestedRole === 'SUPERADMIN') {
+        role = Role.SUPER_ADMIN;
+        password = 'SuperAdmin#2026';
+      } else if (requestedRole === 'VIEWER') {
+        role = Role.VIEWER;
+      }
 
       const { email } = await authService.ensureDemoUser(role);
 
       const result = await authService.login({
         email,
-        password: 'FamilyRoots#2026',
+        password,
         ip,
         userAgent,
       });
 
-      sendSuccess(res, { ...result, role }, `${isViewer ? 'Viewer' : 'Admin'} demo session initialized`);
+      sendSuccess(res, { ...result, role }, `${role} demo session initialized`);
     } catch (error) {
       next(error);
     }

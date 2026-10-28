@@ -112,53 +112,48 @@ export class MemberService {
     // 1. Validate family exists
     await familyService.getFamilyById(familyId, context);
 
+    // Mandatory fields check: First Name, Last Name, and Date of Birth
+    if (!data.firstName?.trim() || !data.lastName?.trim() || !data.dateOfBirth?.trim()) {
+      throw new ValidationError('First Name, Last Name, and Date of Birth are strictly mandatory.');
+    }
+
+    if (data.location !== undefined && typeof data.location === 'string') {
+      data.location = data.location.trim();
+    }
+    if (data.birthPlace !== undefined && typeof data.birthPlace === 'string') {
+      data.birthPlace = data.birthPlace.trim();
+    }
+    if (data.houseName !== undefined && typeof data.houseName === 'string') {
+      data.houseName = data.houseName.trim();
+    }
+
     // 2. Validate and resolve branch references if provided
     if (data.branchIds && data.branchIds.length > 0) {
       data.branchIds = (await this.resolveAndValidateBranchIds(familyId, data.branchIds, undefined, context)) as any;
     }
 
-    // 3. Registered Account Verification Rule
-    // Enforce strict rule: A person can only be added to or exist within the family tree
-    // if they have a registered account created via JSON authentication system.
-    // Link every account directly to its corresponding member node.
-    const isDeceased = data.isLiving === false || Boolean(data.dateOfDeath && data.dateOfDeath.trim().length > 0);
+    // 3. Optional Account Linking (completely optional - nodes do NOT require a registered account or email)
     const rawAccountEmail = (data as any).registeredEmail || (data as any).email || (data as any).userEmail || (data as any).accountEmail;
-    const accountEmail = typeof rawAccountEmail === 'string' ? rawAccountEmail.trim().toLowerCase() : undefined;
+    const accountEmail = typeof rawAccountEmail === 'string' && rawAccountEmail.trim().length > 0
+      ? rawAccountEmail.trim().toLowerCase()
+      : undefined;
     const accountUserId = (data as any).linkedUserId || (data as any).userId;
 
     let linkedUser: any = null;
     if (accountEmail) {
       linkedUser = await userRepository.findByEmail(accountEmail);
-      if (!linkedUser) {
-        throw new ValidationError(`Cannot create member node: No registered account found for "${accountEmail}". Living relatives strictly require a registered account in the authentication database before they can be added.`);
+      if (linkedUser) {
+        data.linkedUserId = linkedUser._id;
+        data.registeredEmail = linkedUser.email;
+      } else {
+        data.registeredEmail = accountEmail;
       }
     } else if (accountUserId && Types.ObjectId.isValid(accountUserId)) {
       linkedUser = await userRepository.findById(accountUserId);
-      if (!linkedUser) {
-        throw new ValidationError('Cannot create member node: The specified user account does not exist.');
+      if (linkedUser) {
+        data.linkedUserId = linkedUser._id;
+        data.registeredEmail = linkedUser.email;
       }
-    } else if (!isDeceased) {
-      const existingCount = await FamilyMember.countDocuments({ familyId: new Types.ObjectId(familyId) });
-      if (existingCount === 0 && context?.userId && Types.ObjectId.isValid(context.userId)) {
-        linkedUser = await userRepository.findById(context.userId);
-      }
-      if (!linkedUser) {
-        throw new ValidationError('Cannot create member node: A registered account email is required. Living family tree nodes strictly require a registered account in the authentication database before they can be added.');
-      }
-    }
-
-    if (linkedUser) {
-      // Enforce universal 1:1 account-to-node mapping in the family tree
-      const existingNodeForUser = await FamilyMember.findOne({
-        familyId: new Types.ObjectId(familyId),
-        linkedUserId: linkedUser._id,
-      });
-      if (existingNodeForUser) {
-        throw new ValidationError(`The account "${linkedUser.email}" is already linked to member "${existingNodeForUser.displayName}" in this tree.`);
-      }
-
-      data.linkedUserId = linkedUser._id;
-      data.registeredEmail = linkedUser.email;
     }
 
     // 4. Normalize display name
@@ -357,6 +352,27 @@ export class MemberService {
         existing._id,
         context
       )) as any;
+    }
+
+    // Mandatory fields non-empty check on update
+    if (data.firstName !== undefined && !data.firstName.trim()) {
+      throw new ValidationError('First Name cannot be empty.');
+    }
+    if (data.lastName !== undefined && !data.lastName.trim()) {
+      throw new ValidationError('Last Name cannot be empty.');
+    }
+    if (data.dateOfBirth !== undefined && !data.dateOfBirth.trim()) {
+      throw new ValidationError('Date of Birth cannot be empty.');
+    }
+
+    if (data.location !== undefined && typeof data.location === 'string') {
+      data.location = data.location.trim();
+    }
+    if (data.birthPlace !== undefined && typeof data.birthPlace === 'string') {
+      data.birthPlace = data.birthPlace.trim();
+    }
+    if (data.houseName !== undefined && typeof data.houseName === 'string') {
+      data.houseName = data.houseName.trim();
     }
 
     // Recompute displayName if first or last name changed and displayName wasn't explicitly provided

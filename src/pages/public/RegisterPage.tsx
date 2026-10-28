@@ -4,13 +4,13 @@ import {
   GitFork,
   Lock,
   Mail,
-  User,
   ArrowRight,
   AlertCircle,
   ShieldCheck,
-  CheckCircle2,
-  UserPlus,
+  ShieldAlert,
+  Eye,
   KeyRound,
+  Hash,
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card.tsx';
 import { Input } from '../../components/ui/Input.tsx';
@@ -21,84 +21,40 @@ import { useCollaborationStore } from '../../stores/useCollaborationStore.ts';
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'signin' | 'register'>('signin');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  // Separate login modes: 'admin' vs 'viewer'
+  const [loginMode, setLoginMode] = useState<'admin' | 'viewer'>('admin');
+
+  // Admin form state
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+
+  // Viewer form state
+  const [viewerCode, setViewerCode] = useState('');
+  const [viewerPassword, setViewerPassword] = useState('');
+
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Quick relative registration modal/state for family admins
-  const [isRelativeModalOpen, setIsRelativeModalOpen] = useState(false);
-  const [relativeFirstName, setRelativeFirstName] = useState('');
-  const [relativeLastName, setRelativeLastName] = useState('');
-  const [relativeEmail, setRelativeEmail] = useState('');
-  const [relativePassword, setRelativePassword] = useState('');
-  const [isRegisteringRelative, setIsRegisteringRelative] = useState(false);
-  const [relativeNotice, setRelativeNotice] = useState<string | null>(null);
-
-  const handleAuthSubmit = async (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMessage(null);
-    setSuccessMessage(null);
 
-    const cleanEmail = email.trim().toLowerCase();
-    const displayName = `${firstName} ${lastName}`.trim() || 'Family Member';
+    const credentialIdentifier = loginMode === 'admin'
+      ? adminEmail.trim().toLowerCase()
+      : viewerCode.trim().toUpperCase();
 
-    try {
-      const endpoint = activeTab === 'signin' ? '/api/auth/login' : '/api/auth/register';
-      const payload =
-        activeTab === 'signin'
-          ? { email: cleanEmail, password }
-          : { displayName, email: cleanEmail, password };
+    const credentialPassword = loginMode === 'admin' ? adminPassword : viewerPassword;
 
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const json = await res.json().catch(() => null);
-
-      if (res.ok && json?.success && json?.data?.accessToken) {
-        setAuthTokens(json.data.accessToken, json.data.refreshToken);
-
-        // Fetch dynamic family tree for the authenticated user account
-        await useFamilyStore.getState().fetchFamilyTree();
-        const currentFam = useFamilyStore.getState().currentFamily;
-        if (currentFam?.id) {
-          await useCollaborationStore.getState().fetchPermissions(currentFam.id);
-        }
-
-        navigate('/family/tree');
-      } else {
-        const errorText =
-          json?.error?.message ||
-          json?.message ||
-          (activeTab === 'signin'
-            ? 'Account not registered or invalid credentials. Please sign up first.'
-            : 'Registration failed. Please enter at least 4 characters for your password.');
-        setErrorMessage(errorText);
-      }
-    } catch {
-      setErrorMessage('Unable to connect to the JSON authentication server. Please try again.');
-    } finally {
+    if (!credentialIdentifier || !credentialPassword) {
+      setErrorMessage(
+        loginMode === 'admin'
+          ? 'Please enter both your Admin Email and Password.'
+          : 'Please enter both your Viewer Login Code and Viewer Password.'
+      );
       setIsLoading(false);
+      return;
     }
-  };
-
-  const handleQuickDemoLogin = async (demoEmail: string, demoPass: string) => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    setEmail(demoEmail);
-    setPassword(demoPass);
 
     try {
       const res = await fetch('/api/auth/login', {
@@ -107,12 +63,94 @@ export const RegisterPage: React.FC = () => {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({ email: demoEmail, password: demoPass }),
+        body: JSON.stringify({
+          email: credentialIdentifier,
+          password: credentialPassword,
+        }),
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (res.ok && json?.success && json?.data?.accessToken) {
+        setAuthTokens(json.data.accessToken, json.data.refreshToken);
+        const userRole = json.data.user?.role;
+        if (userRole) {
+          localStorage.setItem('familyroots_user_role', userRole);
+        }
+
+        if (userRole === 'SUPER_ADMIN') {
+          navigate('/super-admin/dashboard');
+          return;
+        }
+
+        // Fetch dynamic family tree for the authenticated user account
+        if (json.data.user?.familyTreeId) {
+          await useFamilyStore.getState().setActiveFamilyId(json.data.user.familyTreeId);
+        }
+        await useFamilyStore.getState().fetchFamilyTree();
+        const currentFam = useFamilyStore.getState().currentFamily;
+        if (currentFam?.id) {
+          await useCollaborationStore.getState().fetchPermissions(currentFam.id);
+        }
+
+        navigate('/family/tree');
+      } else {
+        const defaultErr =
+          loginMode === 'admin'
+            ? 'Account not registered or invalid Admin credentials. Contact Super Admin to provision your account.'
+            : 'Invalid Viewer Login Code or Viewer Password. Contact your Family Admin or Super Admin.';
+        setErrorMessage(json?.error?.message || json?.message || defaultErr);
+      }
+    } catch {
+      setErrorMessage('Unable to connect to the authentication server. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleQuickDemoLogin = async (
+    targetMode: 'admin' | 'viewer',
+    demoIdentifier: string,
+    demoPass: string
+  ) => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    setLoginMode(targetMode);
+
+    if (targetMode === 'admin') {
+      setAdminEmail(demoIdentifier);
+      setAdminPassword(demoPass);
+    } else {
+      setViewerCode(demoIdentifier);
+      setViewerPassword(demoPass);
+    }
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ email: demoIdentifier, password: demoPass }),
       });
 
       const json = await res.json().catch(() => null);
       if (res.ok && json?.success && json?.data?.accessToken) {
         setAuthTokens(json.data.accessToken, json.data.refreshToken);
+        const userRole = json.data.user?.role;
+        if (userRole) {
+          localStorage.setItem('familyroots_user_role', userRole);
+        }
+
+        if (userRole === 'SUPER_ADMIN') {
+          navigate('/super-admin/dashboard');
+          return;
+        }
+
+        if (json.data.user?.familyTreeId) {
+          await useFamilyStore.getState().setActiveFamilyId(json.data.user.familyTreeId);
+        }
         await useFamilyStore.getState().fetchFamilyTree();
         const currentFam = useFamilyStore.getState().currentFamily;
         if (currentFam?.id) {
@@ -129,41 +167,6 @@ export const RegisterPage: React.FC = () => {
     }
   };
 
-  const handleRegisterRelativeAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsRegisteringRelative(true);
-    setRelativeNotice(null);
-
-    try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          displayName: `${relativeFirstName} ${relativeLastName}`.trim(),
-          email: relativeEmail.trim().toLowerCase(),
-          password: relativePassword,
-        }),
-      });
-
-      const json = await res.json().catch(() => null);
-      if (res.ok && json?.success) {
-        setRelativeNotice(
-          `Account for ${relativeFirstName} (${relativeEmail.trim()}) registered successfully! You can now add them as a tree node using this email.`
-        );
-        setRelativeFirstName('');
-        setRelativeLastName('');
-        setRelativeEmail('');
-        setRelativePassword('');
-      } else {
-        setRelativeNotice(json?.error?.message || json?.message || 'Failed to register account.');
-      }
-    } catch {
-      setRelativeNotice('Network error registering relative account.');
-    } finally {
-      setIsRegisteringRelative(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8">
       {/* Brand Header */}
@@ -175,273 +178,209 @@ export const RegisterPage: React.FC = () => {
           FamilyTree
         </h1>
         <p className="text-xs text-[#64748B] mt-1.5 font-medium">
-          JSON-Based Authentication & Verified Node Mapping System
+          Three-Tier RBAC & SQL Tenant Management System
         </p>
       </div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <Card className="p-6 sm:p-8 shadow-lg border border-[#CBD5E1] bg-white rounded-3xl">
-          {/* Strict Rule Notice Pill */}
-          <div className="mb-5 p-3 rounded-2xl bg-blue-50/80 border border-blue-200 text-xs text-blue-900 flex items-start gap-2.5">
-            <ShieldCheck className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
+          {/* Strict Provisioning Notice */}
+          <div className="mb-5 p-3 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
+            <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="leading-relaxed text-[11.5px]">
-              <strong>Strict Account Rule:</strong> Every person in the family tree must have a registered account created via this JSON authentication system and maps directly to their member node.
+              <strong>Provisioned Access Only:</strong> Public self-registration is disabled. All Admin accounts and Viewer codes are provisioned exclusively by the Super Admin in the SQL database.
             </p>
           </div>
 
-          {/* Tab Switcher: Sign In vs. Register */}
+          {/* Login Mode Switcher Tabs */}
           <div className="grid grid-cols-2 p-1 bg-[#F1F5F9] rounded-2xl border border-[#CBD5E1] mb-5">
             <button
               type="button"
               onClick={() => {
-                setActiveTab('signin');
+                setLoginMode('admin');
                 setErrorMessage(null);
-                setSuccessMessage(null);
               }}
-              className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                activeTab === 'signin'
+              className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                loginMode === 'admin'
                   ? 'bg-white text-[#2563EB] shadow-xs'
                   : 'text-slate-600 hover:text-[#0F172A]'
               }`}
             >
-              Sign In
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Admin</span>
             </button>
             <button
               type="button"
               onClick={() => {
-                setActiveTab('register');
+                setLoginMode('viewer');
                 setErrorMessage(null);
-                setSuccessMessage(null);
               }}
-              className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                activeTab === 'register'
-                  ? 'bg-white text-[#2563EB] shadow-xs'
+              className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                loginMode === 'viewer'
+                  ? 'bg-white text-[#0284C7] shadow-xs'
                   : 'text-slate-600 hover:text-[#0F172A]'
               }`}
             >
-              Register Account
+              <Eye className="w-3.5 h-3.5" />
+              <span>Viewer Login</span>
             </button>
           </div>
 
           {errorMessage && (
-            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex flex-col gap-2">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                <span>{errorMessage}</span>
+            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {/* Mode 1: Admin Login Form */}
+          {loginMode === 'admin' && (
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              <div className="text-[11.5px] text-slate-500 font-medium">
+                Sign in with your provisioned Admin credentials:
               </div>
-              {activeTab === 'signin' && (
+
+              <Input
+                label="Admin Email *"
+                type="email"
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+                placeholder="admin@pattara.heritage"
+                leftIcon={<Mail className="w-3.5 h-3.5 text-slate-400" />}
+                required
+              />
+
+              <Input
+                label="Admin Password *"
+                type="password"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                placeholder="Enter admin password"
+                leftIcon={<Lock className="w-3.5 h-3.5 text-slate-400" />}
+                required
+              />
+
+              <Button
+                type="submit"
+                className="w-full mt-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white py-2.5 shadow-sm font-semibold"
+                isLoading={isLoading}
+                rightIcon={<ArrowRight className="w-4 h-4" />}
+              >
+                Sign In as Admin
+              </Button>
+            </form>
+          )}
+
+          {/* Mode 2: Viewer Login Form */}
+          {loginMode === 'viewer' && (
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              <div className="text-[11.5px] text-slate-500 font-medium">
+                Sign in with your family tree Viewer Code and dedicated Viewer Password:
+              </div>
+
+              <Input
+                label="Viewer Login Code *"
+                type="text"
+                value={viewerCode}
+                onChange={(e) => setViewerCode(e.target.value.toUpperCase())}
+                placeholder="e.g. VIEW-1001"
+                leftIcon={<Hash className="w-3.5 h-3.5 text-slate-400" />}
+                required
+              />
+
+              <Input
+                label="Viewer Password *"
+                type="password"
+                value={viewerPassword}
+                onChange={(e) => setViewerPassword(e.target.value)}
+                placeholder="Enter viewer password"
+                leftIcon={<KeyRound className="w-3.5 h-3.5 text-slate-400" />}
+                required
+              />
+
+              <Button
+                type="submit"
+                className="w-full mt-2 bg-[#0284C7] hover:bg-[#0369A1] text-white py-2.5 shadow-sm font-semibold"
+                isLoading={isLoading}
+                rightIcon={<ArrowRight className="w-4 h-4" />}
+              >
+                Sign In as Viewer (Read-Only)
+              </Button>
+            </form>
+          )}
+
+          {/* Three-Tier Quick Demo Access */}
+          <div className="mt-6 pt-4 border-t border-[#E2E8F0]">
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center mb-2.5">
+              Three-Tier Quick Demo Access
+            </p>
+            <div className="space-y-2">
+              {/* Tier 1: Super Admin */}
+              <button
+                type="button"
+                onClick={() =>
+                  handleQuickDemoLogin('admin', 'superadmin@familyroots.heritage', 'SuperAdmin#2026')
+                }
+                disabled={isLoading}
+                className="w-full p-2.5 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-left transition-colors cursor-pointer flex items-center justify-between"
+              >
+                <div>
+                  <div className="text-[11px] font-bold text-indigo-700 flex items-center gap-1.5">
+                    <ShieldAlert className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Super Admin Master (Platform & SQL Dashboard)</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    superadmin@familyroots.heritage &bull; SuperAdmin#2026
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 shrink-0">
+                  Dashboard
+                </span>
+              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                {/* Tier 2: Admin (Customer) */}
                 <button
                   type="button"
-                  onClick={() => {
-                    setActiveTab('register');
-                    setErrorMessage(null);
-                  }}
-                  className="self-start text-[11px] font-bold text-[#2563EB] hover:underline cursor-pointer bg-blue-50/80 px-2.5 py-1 rounded-lg border border-blue-200"
+                  onClick={() =>
+                    handleQuickDemoLogin('admin', 'admin@pattara.heritage', 'FamilyRoots#2026')
+                  }
+                  disabled={isLoading}
+                  className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-left transition-colors cursor-pointer"
                 >
-                  Need an account? Click here to Register
+                  <div className="text-[11px] font-bold text-[#1D4ED8] flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#2563EB]" />
+                    <span>Admin (Customer)</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                    admin@pattara.heritage
+                  </div>
+                  <div className="text-[9.5px] text-slate-400">Pass: FamilyRoots#2026</div>
                 </button>
-              )}
-            </div>
-          )}
 
-          {successMessage && (
-            <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>{successMessage}</span>
-            </div>
-          )}
-
-          {/* JSON Auth Form */}
-          <form onSubmit={handleAuthSubmit} className="space-y-4">
-            {activeTab === 'register' && (
-              <div className="grid grid-cols-2 gap-3">
-                <Input
-                  label="First Name *"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="e.g. Arun"
-                  leftIcon={<User className="w-3.5 h-3.5 text-slate-400" />}
-                  required
-                />
-                <Input
-                  label="Last Name *"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  placeholder="e.g. Pattara"
-                  required
-                />
+                {/* Tier 3: Viewer (Shared Account) */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleQuickDemoLogin('viewer', 'VIEW-1001', 'FamilyRoots#2026')
+                  }
+                  disabled={isLoading}
+                  className="p-2.5 rounded-xl border border-sky-200 bg-sky-50/70 hover:bg-sky-100 text-left transition-colors cursor-pointer"
+                >
+                  <div className="text-[11px] font-bold text-sky-800 flex items-center gap-1">
+                    <Eye className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Viewer (Code Login)</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 truncate mt-0.5 font-mono">
+                    VIEW-1001
+                  </div>
+                  <div className="text-[9.5px] text-slate-400">Pass: FamilyRoots#2026</div>
+                </button>
               </div>
-            )}
-
-            <Input
-              label="Account Email *"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@example.com"
-              leftIcon={<Mail className="w-3.5 h-3.5 text-slate-400" />}
-              required
-            />
-
-            <Input
-              label="Password *"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              leftIcon={<Lock className="w-3.5 h-3.5 text-slate-400" />}
-              required
-            />
-
-            <Button
-              type="submit"
-              className="w-full mt-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white py-2.5 shadow-sm font-semibold"
-              isLoading={isLoading}
-              rightIcon={<ArrowRight className="w-4 h-4" />}
-            >
-              {activeTab === 'signin' ? 'Sign In & Access Tree' : 'Register Account & Open Tree'}
-            </Button>
-          </form>
-
-          {/* Quick Demo Access Buttons */}
-          <div className="mt-5 pt-4 border-t border-[#E2E8F0]">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center mb-2.5">
-              Quick Demo Access
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickDemoLogin('dev@familyroots.heritage', 'FamilyRoots#2026')}
-                disabled={isLoading}
-                className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-left transition-colors cursor-pointer"
-              >
-                <div className="text-[11px] font-bold text-[#1D4ED8] flex items-center gap-1">
-                  <KeyRound className="w-3 h-3 text-[#2563EB]" />
-                  <span>Admin (Kiran)</span>
-                </div>
-                <div className="text-[10px] text-slate-500 truncate mt-0.5">dev@familyroots.heritage</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickDemoLogin('viewer@familyroots.heritage', 'FamilyRoots#2026')}
-                disabled={isLoading}
-                className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-left transition-colors cursor-pointer"
-              >
-                <div className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
-                  <KeyRound className="w-3 h-3 text-slate-500" />
-                  <span>Viewer (Aarav)</span>
-                </div>
-                <div className="text-[10px] text-slate-500 truncate mt-0.5">viewer@familyroots.heritage</div>
-              </button>
             </div>
-          </div>
-
-          {/* Helper: Register a relative's account in advance */}
-          <div className="mt-4 pt-3 border-t border-[#E2E8F0] text-center">
-            <button
-              type="button"
-              onClick={() => setIsRelativeModalOpen(true)}
-              className="text-xs font-semibold text-[#2563EB] hover:underline inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Register an account for another relative</span>
-            </button>
-            <p className="text-[10.5px] text-[#64748B] mt-0.5">
-              Allows you to create an account for a family member so they can be placed as a tree node.
-            </p>
           </div>
         </Card>
       </div>
-
-      {/* Modal: Register Relative User Account */}
-      {isRelativeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-[#CBD5E1] shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#2563EB] flex items-center justify-center">
-                  <UserPlus className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#0F172A]">Register Relative Account</h3>
-                  <p className="text-[11px] text-slate-500">Create an account for a relative before adding their node</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsRelativeModalOpen(false);
-                  setRelativeNotice(null);
-                }}
-                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            {relativeNotice && (
-              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900">
-                {relativeNotice}
-              </div>
-            )}
-
-            <form onSubmit={handleRegisterRelativeAccount} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-2.5">
-                <Input
-                  label="First Name *"
-                  placeholder="Relative's first name"
-                  value={relativeFirstName}
-                  onChange={(e) => setRelativeFirstName(e.target.value)}
-                  required
-                />
-                <Input
-                  label="Last Name *"
-                  placeholder="Relative's last name"
-                  value={relativeLastName}
-                  onChange={(e) => setRelativeLastName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <Input
-                label="Registered Email *"
-                type="email"
-                placeholder="relative@example.com"
-                value={relativeEmail}
-                onChange={(e) => setRelativeEmail(e.target.value)}
-                required
-              />
-
-              <Input
-                label="Temporary Password *"
-                type="password"
-                placeholder="Min 8 characters (e.g. Rel#2026)"
-                value={relativePassword}
-                onChange={(e) => setRelativePassword(e.target.value)}
-                required
-              />
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsRelativeModalOpen(false)}
-                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  Done
-                </button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  isLoading={isRegisteringRelative}
-                  className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white"
-                >
-                  Register Account
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

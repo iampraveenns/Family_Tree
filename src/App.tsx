@@ -15,6 +15,10 @@ const FamilyTreePage = React.lazy(() =>
   import('./pages/family/FamilyTreePage.tsx').then((m) => ({ default: m.FamilyTreePage }))
 );
 
+const SuperAdminDashboard = React.lazy(() =>
+  import('./pages/admin/SuperAdminDashboard.tsx').then((m) => ({ default: m.SuperAdminDashboard }))
+);
+
 function RouteFallback() {
   return <PageSkeleton />;
 }
@@ -54,8 +58,10 @@ export default function App() {
               <Route path="/signup" element={<RegisterPage />} />
               <Route path="/login" element={<RegisterPage />} />
 
-              {/* 2nd Page: Family Tree (No other pages or navigation) */}
+              {/* Application Layout for Family Tree & Super Admin Dashboard */}
               <Route element={<AppLayout />}>
+                <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
+                <Route path="/super-admin" element={<Navigate to="/super-admin/dashboard" replace />} />
                 <Route path="/family/tree" element={<FamilyTreePage />} />
                 <Route path="/tree" element={<FamilyTreePage />} />
                 <Route path="/dashboard" element={<Navigate to="/family/tree" replace />} />

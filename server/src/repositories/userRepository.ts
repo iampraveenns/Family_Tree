@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 import { User, IUser } from '../models/User.ts';
-import { UserStatus } from '../constants/index.ts';
+import { UserStatus, Role } from '../constants/index.ts';
 
 export class UserRepository {
   async findByEmail(email: string): Promise<IUser | null> {
@@ -19,6 +19,8 @@ export class UserRepository {
     displayName: string;
     avatar?: string;
     status?: UserStatus;
+    role?: Role;
+    familyTreeId?: string;
   }): Promise<IUser> {
     const user = new User({
       ...data,

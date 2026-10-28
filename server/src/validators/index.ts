@@ -110,7 +110,7 @@ export const createMemberSchema = z.object({
   nickname: z.string().max(80).optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'UNKNOWN']).default('UNKNOWN'),
   profilePhoto: z.string().optional(),
-  dateOfBirth: z.string().max(30).optional(),
+  dateOfBirth: z.string().min(1, 'Date of birth is required').max(30),
   dateOfDeath: z.string().max(30).optional(),
   isLiving: z.boolean().default(true),
   birthPlace: z.string().max(200).optional(),
@@ -135,14 +135,14 @@ export const createMemberSchema = z.object({
 });
 
 export const updateMemberSchema = z.object({
-  firstName: z.string().min(1).max(80).optional(),
+  firstName: z.string().min(1, 'First name is required').max(80).optional(),
   middleName: z.string().max(80).optional(),
-  lastName: z.string().min(1).max(80).optional(),
+  lastName: z.string().min(1, 'Last name is required').max(80).optional(),
   displayName: z.string().max(100).optional(),
   nickname: z.string().max(80).optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'UNKNOWN']).optional(),
   profilePhoto: z.string().optional(),
-  dateOfBirth: z.string().max(30).optional().nullable(),
+  dateOfBirth: z.string().min(1, 'Date of birth is required').max(30).optional(),
   dateOfDeath: z.string().max(30).optional().nullable(),
   isLiving: z.boolean().optional(),
   birthPlace: z.string().max(200).optional().nullable(),

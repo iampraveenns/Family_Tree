@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
-import { UserStatus } from '../constants/index.ts';
+import { UserStatus, Role } from '../constants/index.ts';
 
 export interface IUser extends Document {
   _id: Types.ObjectId;
@@ -8,6 +8,8 @@ export interface IUser extends Document {
   displayName: string;
   avatar?: string;
   status: UserStatus;
+  role?: Role;
+  familyTreeId?: string;
   tokenVersion: number;
   lastLoginAt?: Date;
   createdAt: Date;
@@ -41,6 +43,15 @@ const UserSchema = new Schema<IUser>(
       type: String,
       enum: Object.values(UserStatus),
       default: UserStatus.ACTIVE,
+      index: true,
+    },
+    role: {
+      type: String,
+      default: Role.ADMIN,
+      index: true,
+    },
+    familyTreeId: {
+      type: String,
       index: true,
     },
     tokenVersion: {

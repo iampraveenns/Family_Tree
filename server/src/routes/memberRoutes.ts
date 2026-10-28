@@ -142,6 +142,15 @@ router.patch(
   }
 );
 
+router.put(
+  '/:memberId',
+  requireMemberUpdateAuth(),
+  validate({ body: updateMemberSchema }),
+  (req, res, next) => {
+    memberController.updateMember(req, res, next);
+  }
+);
+
 router.delete('/:memberId', requireAdminMemberAuth(), (req, res, next) => {
   memberController.deleteMember(req, res, next);
 });
