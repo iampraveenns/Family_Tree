@@ -56,12 +56,11 @@ export const StarterMemberNode: React.FC<NodeProps<StarterNodeData>> = memo(({ d
       style={{
         width: 280,
         height: 160,
-        backgroundColor: '#D3D3D3',
       }}
       aria-label={isMember ? 'Empty starter member card' : 'Empty starter spouse card'}
       onPointerDown={handlePointerDown}
       onMouseDown={handleMouseDown}
-      className="group relative w-[280px] h-[160px] box-border rounded-2xl border-[1.5px] border-dashed border-slate-400 p-3 transition-all duration-200 select-none flex flex-col justify-between items-center text-center bg-[#D3D3D3] shadow-xs overflow-hidden focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2 hover:border-slate-600 hover:shadow-md"
+      className="group relative w-[280px] h-[160px] box-border rounded-2xl border-[1.5px] border-dashed border-slate-300 p-3 transition-all duration-200 select-none flex flex-col justify-between items-center text-center bg-gradient-to-br from-[#F8FAFC] via-[#F1F5F9] to-[#E2E8F0] shadow-sm overflow-hidden focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2 hover:border-slate-400 hover:shadow-md"
     >
       {/* Target/Source Connection Handles for Left/Right Couple Linking */}
       <Handle

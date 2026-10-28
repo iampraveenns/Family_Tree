@@ -23,6 +23,22 @@ function RouteFallback() {
   return <PageSkeleton />;
 }
 
+function SuperAdminRoute({ children }: { children: React.ReactNode }) {
+  const role = typeof localStorage !== 'undefined' ? (localStorage.getItem('familyroots_user_role') || '').toUpperCase() : '';
+  if (role && role !== 'SUPER_ADMIN') {
+    return <Navigate to="/family/tree" replace />;
+  }
+  return <>{children}</>;
+}
+
+function FamilyTreeRoute({ children }: { children: React.ReactNode }) {
+  const role = typeof localStorage !== 'undefined' ? (localStorage.getItem('familyroots_user_role') || '').toUpperCase() : '';
+  if (role === 'SUPER_ADMIN') {
+    return <Navigate to="/super-admin/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
 export default function App() {
   const { isDark } = useThemeStore();
   const { fetchFamilyTree } = useFamilyStore();
@@ -60,10 +76,31 @@ export default function App() {
 
               {/* Application Layout for Family Tree & Super Admin Dashboard */}
               <Route element={<AppLayout />}>
-                <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
+                <Route
+                  path="/super-admin/dashboard"
+                  element={
+                    <SuperAdminRoute>
+                      <SuperAdminDashboard />
+                    </SuperAdminRoute>
+                  }
+                />
                 <Route path="/super-admin" element={<Navigate to="/super-admin/dashboard" replace />} />
-                <Route path="/family/tree" element={<FamilyTreePage />} />
-                <Route path="/tree" element={<FamilyTreePage />} />
+                <Route
+                  path="/family/tree"
+                  element={
+                    <FamilyTreeRoute>
+                      <FamilyTreePage />
+                    </FamilyTreeRoute>
+                  }
+                />
+                <Route
+                  path="/tree"
+                  element={
+                    <FamilyTreeRoute>
+                      <FamilyTreePage />
+                    </FamilyTreeRoute>
+                  }
+                />
                 <Route path="/dashboard" element={<Navigate to="/family/tree" replace />} />
               </Route>
 

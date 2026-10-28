@@ -7,6 +7,22 @@ import { resolveDynamicBranches } from '../utils/branchUtils.ts';
 
 export const STORAGE_ACTIVE_FAMILY_KEY = 'familyroots_active_family_id';
 
+/**
+ * Format branch name strictly as '<First Name> <Last Name> Branch'.
+ * Strips apostrophes ('s, ’s), leftover 's' characters, and the word 'Family'.
+ */
+export function formatStandardBranchName(name?: string | null): string {
+  if (!name) return '';
+  let cleaned = name.trim();
+  cleaned = cleaned.replace(/\s+Branch$/i, '').trim();
+  cleaned = cleaned.replace(/['’]s\b/gi, '').trim();
+  cleaned = cleaned.replace(/\s+[sS]\b/g, '').trim();
+  cleaned = cleaned.replace(/\bFamily\b/gi, '').trim();
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return 'Branch';
+  return `${cleaned} Branch`;
+}
+
 interface FamilyState {
   currentFamily: Family;
   availableFamilies: Family[];
@@ -351,16 +367,22 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         totalMemories: get().memories.length,
       };
 
-      const mappedBranches: FamilyBranch[] = branches.map(
-        (b: { id: string; name: string; description?: string; rootMemberId: string; accentColor?: string }) => {
+      const seenBranchNames = new Set<string>();
+      const mappedBranches: FamilyBranch[] = [];
+
+      for (const b of (branches || [])) {
+        const stdName = formatStandardBranchName(b.name);
+        const nameKey = stdName.toLowerCase().trim();
+        if (!seenBranchNames.has(nameKey)) {
+          seenBranchNames.add(nameKey);
           const rootMem = members.find(
             (m: { id: string; displayName?: string; firstName: string; lastName: string }) => m.id === b.rootMemberId
           );
           const memCount = members.filter((m: { branchIds?: string[] }) => (m.branchIds || []).includes(b.id)).length;
-          return {
+          mappedBranches.push({
             id: b.id,
             familyId: family.id || family._id,
-            name: b.name,
+            name: stdName,
             description: b.description || '',
             rootMemberId: b.rootMemberId,
             rootMemberName: rootMem
@@ -368,9 +390,9 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
               : 'Branch Ancestor',
             memberCount: memCount || 1,
             accentColor: b.accentColor || '#059669',
-          };
+          });
         }
-      );
+      }
 
       const branchMap = new Map(mappedBranches.map((b) => [b.id, b.name]));
 
@@ -402,6 +424,8 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
           profilePhoto?: string;
         }) => {
           const primaryBranchId = m.branchIds && m.branchIds.length > 0 ? m.branchIds[0] : undefined;
+          const rawBranchName = primaryBranchId ? branchMap.get(primaryBranchId) : (m as any).branchName;
+          const branchName = rawBranchName ? formatStandardBranchName(rawBranchName) : undefined;
           const derivedMarriageDate = memberMarriageDates.get(m.id) || (m as any).dateOfMarriage || (m as any).marriageDate || undefined;
           return {
             id: m.id,
@@ -425,7 +449,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
             displayOrder: (m as any).displayOrder ?? (m as any).siblingOrder ?? null,
             createdAt: (m as any).createdAt,
             branchId: primaryBranchId,
-            branchName: primaryBranchId ? branchMap.get(primaryBranchId) : undefined,
+            branchName: branchName,
             memoryCount: 0,
             profilePhoto: m.profilePhoto,
             avatar: m.profilePhoto,

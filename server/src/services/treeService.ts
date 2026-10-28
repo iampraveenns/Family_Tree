@@ -1,7 +1,7 @@
 import { memberRepository } from '../repositories/memberRepository.ts';
 import { relationshipRepository } from '../repositories/relationshipRepository.ts';
 import { branchRepository } from '../repositories/branchRepository.ts';
-import { branchService } from './branchService.ts';
+import { branchService, formatStandardBranchName } from './branchService.ts';
 import { familyService } from './familyService.ts';
 import { ServiceContext } from './familyService.ts';
 
@@ -75,7 +75,36 @@ export class TreeService {
     ]);
 
     const branchMap = new Map<string, string>();
-    branches.forEach((b) => branchMap.set(b._id.toString(), b.name));
+    branches.forEach((b) => branchMap.set(b._id.toString(), formatStandardBranchName(b.name)));
+
+    // Deduplicate branches strictly so each unique branch name appears only once
+    const seenBranchNames = new Set<string>();
+    const deduplicatedBranches: Array<{
+      id: string;
+      familyId: string;
+      name: string;
+      description?: string;
+      rootMemberId: string;
+      accentColor?: string;
+      coverImage?: string;
+    }> = [];
+
+    for (const b of branches) {
+      const standardizedName = formatStandardBranchName(b.name);
+      const nameKey = standardizedName.toLowerCase().trim();
+      if (!seenBranchNames.has(nameKey)) {
+        seenBranchNames.add(nameKey);
+        deduplicatedBranches.push({
+          id: b._id.toString(),
+          familyId: b.familyId.toString(),
+          name: standardizedName,
+          description: b.description,
+          rootMemberId: b.rootMemberId ? b.rootMemberId.toString() : '',
+          accentColor: b.accentColor,
+          coverImage: b.coverImage,
+        });
+      }
+    }
 
     return {
       family: {
@@ -87,7 +116,8 @@ export class TreeService {
       },
       members: members.map((m) => {
         const primaryBranchId = (m.branchIds && m.branchIds.length > 0) ? m.branchIds[0].toString() : undefined;
-        const branchName = primaryBranchId ? branchMap.get(primaryBranchId) : (m as any).branchName;
+        const rawBranchName = primaryBranchId ? branchMap.get(primaryBranchId) : (m as any).branchName;
+        const branchName = rawBranchName ? formatStandardBranchName(rawBranchName) : undefined;
         return {
           id: m._id.toString(),
           familyId: m.familyId.toString(),
@@ -125,15 +155,7 @@ export class TreeService {
         marriageDate: r.marriageDate || (r.metadata as any)?.marriageDate || null,
         metadata: r.metadata,
       })),
-      branches: branches.map((b) => ({
-        id: b._id.toString(),
-        familyId: b.familyId.toString(),
-        name: b.name,
-        description: b.description,
-        rootMemberId: b.rootMemberId.toString(),
-        accentColor: b.accentColor,
-        coverImage: b.coverImage,
-      })),
+      branches: deduplicatedBranches,
     };
   }
 }

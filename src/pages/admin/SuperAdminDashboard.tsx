@@ -6,7 +6,6 @@ import {
   UserPlus,
   GitFork,
   Trash2,
-  ExternalLink,
   Users,
   Search,
   CheckCircle2,
@@ -28,7 +27,6 @@ import { Input } from '../../components/ui/Input.tsx';
 import { Button } from '../../components/ui/Button.tsx';
 import { Modal } from '../../components/ui/Modal.tsx';
 import { authenticatedFetch } from '../../utils/api.ts';
-import { useFamilyStore } from '../../stores/useFamilyStore.ts';
 import { useToastStore } from '../../stores/useToastStore.ts';
 
 export interface CustomerRecord {
@@ -45,7 +43,6 @@ export interface CustomerRecord {
 
 export const SuperAdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { setActiveFamilyId, fetchFamilyTree } = useFamilyStore();
   const { success, error: toastError } = useToastStore();
 
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
@@ -110,9 +107,14 @@ export const SuperAdminDashboard: React.FC = () => {
   };
 
   useEffect(() => {
+    const role = typeof localStorage !== 'undefined' ? (localStorage.getItem('familyroots_user_role') || '').toUpperCase() : '';
+    if (role && role !== 'SUPER_ADMIN') {
+      navigate('/family/tree', { replace: true });
+      return;
+    }
     fetchCustomers();
     fetchSuperAccount();
-  }, []);
+  }, [navigate]);
 
   const handleOpenSettings = () => {
     setSettingsError(null);
@@ -245,16 +247,6 @@ export const SuperAdminDashboard: React.FC = () => {
       }
     } catch {
       toastError('Network error deleting customer.');
-    }
-  };
-
-  const handleOpenTree = async (treeId: string) => {
-    try {
-      await setActiveFamilyId(treeId);
-      await fetchFamilyTree(treeId);
-      navigate('/family/tree');
-    } catch {
-      navigate('/family/tree');
     }
   };
 
@@ -583,14 +575,6 @@ export const SuperAdminDashboard: React.FC = () => {
                           </td>
                           <td className="py-3 px-4 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenTree(cust.family_tree_id)}
-                                title="Open & Inspect Family Tree"
-                                className="p-1.5 rounded-lg text-slate-600 hover:text-[#2563EB] hover:bg-blue-50 border border-slate-200 transition-colors cursor-pointer"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleCopyCredentials(cust)}

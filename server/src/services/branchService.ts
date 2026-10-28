@@ -17,6 +17,27 @@ export interface CreateBranchInput {
   visibility?: BranchVisibility;
 }
 
+/**
+ * Strictly format branch names as '<First Name> <Last Name> Branch' (e.g. 'Sathiyam Soni Branch').
+ * Strips apostrophes ('s, ’s), trailing Family/Branch, and extra spaces.
+ */
+export function formatStandardBranchName(name?: string | null): string {
+  if (!name) return '';
+  let cleaned = name.trim();
+  // Strip trailing "Branch"
+  cleaned = cleaned.replace(/\s+Branch$/i, '').trim();
+  // Strip possessive apostrophes
+  cleaned = cleaned.replace(/['’]s\b/gi, '').trim();
+  // Strip stray "s" / "S" leftover from basic apostrophe deletion
+  cleaned = cleaned.replace(/\s+[sS]\b/g, '').trim();
+  // Strip the word "Family"
+  cleaned = cleaned.replace(/\bFamily\b/gi, '').trim();
+  // Collapse duplicate whitespace
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return 'Branch';
+  return `${cleaned} Branch`;
+}
+
 export class BranchService {
   async createBranch(familyId: string, input: CreateBranchInput, context?: ServiceContext): Promise<IBranch> {
     await familyService.getFamilyById(familyId, context);
@@ -470,7 +491,9 @@ export class BranchService {
   /**
    * Automatic Branch Creation:
    * Whenever a person in the tree has both a spouse and a child,
-   * automatically create a separate, dedicated branch named after that member (e.g., [Member Name]'s Family Branch).
+   * automatically create a separate, dedicated branch strictly formatted as
+   * '<First Name> <Last Name> Branch' (e.g., 'Sathiyam Soni Branch').
+   * Deduplicates branches so only one branch exists per name.
    */
   async syncAutomaticBranches(familyId: string, context?: ServiceContext): Promise<void> {
     try {
@@ -481,6 +504,60 @@ export class BranchService {
 
       const { relationshipRepository } = await import('../repositories/relationshipRepository.ts');
       const { Branch } = await import('../models/Branch.ts');
+
+      // 1. Cleanup, normalize, and deduplicate all existing branches in the database for this family
+      const existingBranches = await Branch.find({ familyId: familyOid });
+      const canonicalBranchesByNormName = new Map<string, any>();
+      const branchesToDelete: any[] = [];
+      const branchIdRedirectMap = new Map<string, Types.ObjectId>();
+
+      for (const b of existingBranches) {
+        const stdName = formatStandardBranchName(b.name);
+        const normKey = stdName.toLowerCase();
+        if (!canonicalBranchesByNormName.has(normKey)) {
+          if (b.name !== stdName) {
+            b.name = stdName;
+            await b.save();
+          }
+          canonicalBranchesByNormName.set(normKey, b);
+        } else {
+          // Duplicate branch found
+          const canonical = canonicalBranchesByNormName.get(normKey);
+          branchIdRedirectMap.set(b._id.toString(), canonical._id);
+          branchesToDelete.push(b);
+        }
+      }
+
+      // Delete duplicate branches from database and remap any member references
+      for (const dup of branchesToDelete) {
+        const canonicalId = branchIdRedirectMap.get(dup._id.toString());
+        if (canonicalId) {
+          for (const m of members) {
+            let memberUpdated = false;
+            if (m.branchIds && m.branchIds.some((id: any) => id.toString() === dup._id.toString())) {
+              m.branchIds = m.branchIds.map((id: any) =>
+                id.toString() === dup._id.toString() ? canonicalId : id
+              );
+              const uniqueIds = Array.from(new Set(m.branchIds.map((id: any) => id.toString()))).map(
+                (idStr) => new Types.ObjectId(idStr)
+              );
+              m.branchIds = uniqueIds;
+              memberUpdated = true;
+            }
+            if ((m as any).branchName) {
+              const formattedMemberBranch = formatStandardBranchName((m as any).branchName);
+              if ((m as any).branchName !== formattedMemberBranch) {
+                (m as any).branchName = formattedMemberBranch;
+                memberUpdated = true;
+              }
+            }
+            if (memberUpdated) {
+              await m.save();
+            }
+          }
+        }
+        await Branch.deleteOne({ _id: dup._id });
+      }
 
       const relationships = await relationshipRepository.findByFamilyId(familyId);
 
@@ -529,37 +606,43 @@ export class BranchService {
         const hasChild = Boolean(memberChildren && memberChildren.size > 0);
 
         if (hasSpouse && hasChild) {
-          const memberName = (member.displayName || `${member.firstName} ${member.lastName}`).trim();
-          const branchName = `${memberName}'s Family Branch`;
+          const rawMemberName = (member.displayName || `${member.firstName} ${member.lastName}`).trim();
+          const branchName = formatStandardBranchName(rawMemberName);
+          const normKey = branchName.toLowerCase();
 
-          // Check if branch already exists for this member
-          let branch = await Branch.findOne({
-            familyId: familyOid,
-            $or: [
-              { rootMemberId: member._id },
-              { name: branchName },
-            ],
-          });
+          // Check if branch already exists for this member or name
+          let branch = canonicalBranchesByNormName.get(normKey);
+          if (!branch) {
+            branch = await Branch.findOne({
+              familyId: familyOid,
+              $or: [
+                { rootMemberId: member._id },
+                { name: branchName },
+              ],
+            });
+          }
 
           if (!branch) {
             branch = await Branch.create({
               familyId: familyOid,
               name: branchName,
-              description: `Dedicated lineage branch established for ${memberName} and descendants.`,
+              description: `Dedicated lineage branch established for ${rawMemberName} and descendants.`,
               rootMemberId: member._id,
               accentColor: '#2563EB',
               createdBy: context?.userId || 'system',
               visibility: BranchVisibility.FAMILY,
             });
+            canonicalBranchesByNormName.set(normKey, branch);
           } else if (branch.name !== branchName) {
             branch.name = branchName;
             await branch.save();
+            canonicalBranchesByNormName.set(normKey, branch);
           }
 
           const branchOid = branch._id;
 
           // 1. Immediate Reassignment on the member themselves (overwrite inherited parent branch)
-          if (!member.branchIds || member.branchIds.length !== 1 || member.branchIds[0].toString() !== branchOid.toString()) {
+          if (!member.branchIds || member.branchIds.length !== 1 || member.branchIds[0].toString() !== branchOid.toString() || (member as any).branchName !== branchName) {
             member.branchIds = [branchOid];
             (member as any).branchName = branchName;
             await member.save();
@@ -569,7 +652,7 @@ export class BranchService {
           for (const spouseId of memberSpouses!) {
             const spouseMember = members.find((m) => m._id.toString() === spouseId);
             if (spouseMember) {
-              if (!spouseMember.branchIds || spouseMember.branchIds.length !== 1 || spouseMember.branchIds[0].toString() !== branchOid.toString()) {
+              if (!spouseMember.branchIds || spouseMember.branchIds.length !== 1 || spouseMember.branchIds[0].toString() !== branchOid.toString() || (spouseMember as any).branchName !== branchName) {
                 spouseMember.branchIds = [branchOid];
                 (spouseMember as any).branchName = branchName;
                 await spouseMember.save();
@@ -591,7 +674,7 @@ export class BranchService {
               const childHasChildren = (childrenByMember.get(childId)?.size ?? 0) > 0;
               // If child does not have their own spouse+child, overwrite to parent's branch
               if (!childHasSpouse || !childHasChildren) {
-                if (!childMember.branchIds || childMember.branchIds.length !== 1 || childMember.branchIds[0].toString() !== branchOid.toString()) {
+                if (!childMember.branchIds || childMember.branchIds.length !== 1 || childMember.branchIds[0].toString() !== branchOid.toString() || (childMember as any).branchName !== branchName) {
                   childMember.branchIds = [branchOid];
                   (childMember as any).branchName = branchName;
                   await childMember.save();
@@ -602,6 +685,17 @@ export class BranchService {
                 }
               }
             }
+          }
+        }
+      }
+
+      // Final pass: ensure all members have clean branchName format
+      for (const m of members) {
+        if ((m as any).branchName) {
+          const std = formatStandardBranchName((m as any).branchName);
+          if ((m as any).branchName !== std) {
+            (m as any).branchName = std;
+            await m.save();
           }
         }
       }

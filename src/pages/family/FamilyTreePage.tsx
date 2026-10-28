@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -40,7 +41,7 @@ import { useCollaborationStore } from '../../stores/useCollaborationStore.ts';
 import { useMemoryStore } from '../../stores/useMemoryStore.ts';
 import { useTimelineStore } from '../../stores/useTimelineStore.ts';
 import { useToastStore } from '../../stores/useToastStore.ts';
-import { FamilyMember } from '../../types/index.ts';
+import { FamilyMember, FamilyBranch } from '../../types/index.ts';
 import { MemberAvatar } from '../../components/ui/MemberAvatar.tsx';
 import { Badge } from '../../components/ui/Badge.tsx';
 import { Button } from '../../components/ui/Button.tsx';
@@ -88,6 +89,15 @@ const FamilyTreeInner: React.FC = () => {
   } = useFamilyStore();
   const { success, error: toastError } = useToastStore();
   const reactFlowInstance = useReactFlow();
+  const navigate = useNavigate();
+
+  // Super Admin Isolation: Super Admin role can ONLY access /super-admin/dashboard
+  useEffect(() => {
+    const role = typeof localStorage !== 'undefined' ? (localStorage.getItem('familyroots_user_role') || '').toUpperCase() : '';
+    if (role === 'SUPER_ADMIN') {
+      navigate('/super-admin/dashboard', { replace: true });
+    }
+  }, [navigate]);
 
   const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
   const [drawerMember, setDrawerMember] = useState<FamilyMember | null>(null);
@@ -104,6 +114,20 @@ const FamilyTreeInner: React.FC = () => {
   const [isCreateFamilyOpen, setIsCreateFamilyOpen] = useState(false);
   const [isFamilyVaultDropdownOpen, setIsFamilyVaultDropdownOpen] = useState(false);
   const [isMemoriesSidebarOpen, setIsMemoriesSidebarOpen] = useState(false);
+
+  // Normalize and deduplicate branches so each branch appears only once
+  const deduplicatedBranches = useMemo(() => {
+    const seen = new Set<string>();
+    const result: FamilyBranch[] = [];
+    for (const b of branches) {
+      const formatted = (b.name || '').trim().toLowerCase();
+      if (formatted && !seen.has(formatted)) {
+        seen.add(formatted);
+        result.push(b);
+      }
+    }
+    return result;
+  }, [branches]);
 
   const { memories, fetchMemories } = useMemoryStore();
   const { events, fetchTimeline } = useTimelineStore();
@@ -791,7 +815,7 @@ const FamilyTreeInner: React.FC = () => {
           isPrimaryPartner,
           isSecondarySpouse,
           hideRelationshipActions,
-          canEdit: isAdmin || isUserSelfNode,
+          canEdit: isAdmin,
           canAddRelatives: isAdmin,
           isUserSelfNode,
           isRootNode,
@@ -1598,7 +1622,7 @@ const FamilyTreeInner: React.FC = () => {
               aria-label="Scroll branches left"
               title="Scroll branches left"
               className={`p-1 rounded-lg text-[#64748B] hover:text-[#2563EB] hover:bg-[#F1F5F9] transition-colors cursor-pointer shrink-0 ${
-                branches.length > 2 ? 'inline-flex' : 'hidden'
+                deduplicatedBranches.length > 2 ? 'inline-flex' : 'hidden'
               }`}
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -1610,7 +1634,7 @@ const FamilyTreeInner: React.FC = () => {
               data-testid="branches-scroll-container"
               className="flex items-center gap-1.5 overflow-x-auto scroll-smooth w-auto max-w-[430px] w-[430px] select-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
               style={{
-                width: branches.length <= 1 ? 'auto' : undefined,
+                width: deduplicatedBranches.length <= 1 ? 'auto' : undefined,
                 maxWidth: '430px',
               }}
             >
@@ -1626,20 +1650,27 @@ const FamilyTreeInner: React.FC = () => {
                 All Branches
               </button>
               {members.length > 0 &&
-                branches.map((b) => (
-                  <button
-                    key={b.id}
-                    data-testid={`branch-tab-${b.id}`}
-                    onClick={() => setSelectedBranch(b.id)}
-                    className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer shrink-0 whitespace-nowrap text-xs ${
-                      selectedBranch === b.id
-                        ? 'bg-[#2563EB] text-white shadow-xs font-semibold'
-                        : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
-                    }`}
-                  >
-                    {b.name}
-                  </button>
-                ))}
+                deduplicatedBranches.map((b) => {
+                  const isActive =
+                    selectedBranch === b.id ||
+                    (Boolean(selectedBranch) &&
+                      deduplicatedBranches.find((db) => db.id === selectedBranch)?.name.toLowerCase().trim() ===
+                        b.name.toLowerCase().trim());
+                  return (
+                    <button
+                      key={b.id}
+                      data-testid={`branch-tab-${b.id}`}
+                      onClick={() => setSelectedBranch(b.id)}
+                      className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer shrink-0 whitespace-nowrap text-xs ${
+                        isActive
+                          ? 'bg-[#2563EB] text-white shadow-xs font-semibold'
+                          : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
+                      }`}
+                    >
+                      {b.name}
+                    </button>
+                  );
+                })}
             </div>
 
             {/* Scroll Right Button */}
@@ -1650,7 +1681,7 @@ const FamilyTreeInner: React.FC = () => {
               aria-label="Scroll branches right"
               title="Scroll branches right"
               className={`p-1 rounded-lg text-[#64748B] hover:text-[#2563EB] hover:bg-[#F1F5F9] transition-colors cursor-pointer shrink-0 ${
-                branches.length > 2 ? 'inline-flex' : 'hidden'
+                deduplicatedBranches.length > 2 ? 'inline-flex' : 'hidden'
               }`}
             >
               <ChevronRight className="w-3.5 h-3.5" />

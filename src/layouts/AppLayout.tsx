@@ -65,31 +65,11 @@ export const AppLayout: React.FC = () => {
             </div>
           </Link>
 
-          {/* Super Admin Navigation Toggle */}
+          {/* Super Admin Status Indicator (Isolated from Family Tree) */}
           {isSuperAdmin && (
-            <div className="hidden sm:flex items-center ml-2 p-0.5 rounded-xl bg-slate-100 border border-slate-200 text-xs">
-              <Link
-                to="/super-admin/dashboard"
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold transition-all ${
-                  location.pathname.startsWith('/super-admin')
-                    ? 'bg-white text-indigo-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <LayoutDashboard className="w-3 h-3 text-indigo-600" />
-                <span>Dashboard</span>
-              </Link>
-              <Link
-                to="/family/tree"
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold transition-all ${
-                  location.pathname.startsWith('/family/tree') || location.pathname.startsWith('/tree')
-                    ? 'bg-white text-[#2563EB] shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <GitFork className="w-3 h-3 text-[#2563EB]" />
-                <span>Family Tree</span>
-              </Link>
+            <div className="hidden sm:flex items-center ml-2 px-2.5 py-1 rounded-xl bg-indigo-50 border border-indigo-200 text-xs font-bold text-indigo-700 shadow-2xs">
+              <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600 mr-1" />
+              <span>Super Admin Portal</span>
             </div>
           )}
         </div>

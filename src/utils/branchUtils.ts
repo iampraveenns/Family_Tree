@@ -1,6 +1,22 @@
 import { FamilyMember, Relationship } from '../types/index.ts';
 
 /**
+ * Format branch name strictly as '<First Name> <Last Name> Branch'.
+ * Strips apostrophes ('s, ’s), leftover 's' characters, and the word 'Family'.
+ */
+export function formatStandardBranchName(name?: string | null): string {
+  if (!name) return '';
+  let cleaned = name.trim();
+  cleaned = cleaned.replace(/\s+Branch$/i, '').trim();
+  cleaned = cleaned.replace(/['’]s\b/gi, '').trim();
+  cleaned = cleaned.replace(/\s+[sS]\b/g, '').trim();
+  cleaned = cleaned.replace(/\bFamily\b/gi, '').trim();
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return 'Branch';
+  return `${cleaned} Branch`;
+}
+
+/**
  * Dynamically resolves and assigns branch names to all family members.
  *
  * Rules:
@@ -59,7 +75,7 @@ export function resolveDynamicBranches(
   // Track assigned branch names: memberId -> branchName
   const branchAssignments = new Map<string, string>();
 
-  // Helper to format branch name from a person's name
+  // Helper to format branch name strictly as '<First Name> <Last Name> Branch'
   const makeBranchName = (m: FamilyMember): string => {
     // If testing in phase52 test suite with explicit fixture IDs
     if (
@@ -72,16 +88,12 @@ export function resolveDynamicBranches(
       m.branchName &&
       m.branchName.trim() &&
       m.branchName.toLowerCase() !== 'root lineage' &&
-      m.branchName.toLowerCase() !== 'rootlineage' &&
-      m.branchName.toLowerCase().endsWith('family branch')
+      m.branchName.toLowerCase() !== 'rootlineage'
     ) {
-      return m.branchName.trim();
+      return formatStandardBranchName(m.branchName);
     }
-    const cleanName = (m.displayName || `${m.firstName} ${m.lastName}`).trim() || m.firstName || 'Family';
-    if (cleanName.toLowerCase().endsWith('branch')) {
-      return cleanName;
-    }
-    return `${cleanName}'s Family Branch`;
+    const cleanName = (m.displayName || `${m.firstName} ${m.lastName}`).trim() || m.firstName || 'Branch';
+    return formatStandardBranchName(cleanName);
   };
 
   // Find root ancestors (Generation 1 or members with no parents in the tree)
@@ -92,7 +104,7 @@ export function resolveDynamicBranches(
 
   // If root members exist, assign root branch
   const primaryRoot = rootMembers.find((m) => m.gender === 'MALE') || rootMembers[0] || members[0];
-  const rootBranchName = primaryRoot ? makeBranchName(primaryRoot) : 'Main Family Branch';
+  const rootBranchName = primaryRoot ? makeBranchName(primaryRoot) : 'Root Branch';
 
   rootMembers.forEach((rm) => {
     branchAssignments.set(rm.id, rootBranchName);

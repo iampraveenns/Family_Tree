@@ -418,10 +418,9 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
       style={{
         width: 280,
         height: 160,
-        backgroundColor: '#D3D3D3',
       }}
       aria-label={`Family member ${fullName}, Generation ${member.generation}`}
-      className={`group relative w-[280px] h-[160px] box-border rounded-2xl border-[1.5px] p-2.5 transition-all duration-200 ease-out cursor-default select-none outline-none flex flex-col justify-between bg-[#D3D3D3] ${
+      className={`group relative w-[280px] h-[160px] box-border rounded-2xl border-[1.5px] p-2.5 transition-all duration-200 ease-out cursor-default select-none outline-none flex flex-col justify-between bg-gradient-to-br from-[#F8FAFC] via-[#F1F5F9] to-[#E2E8F0] ${
         isPhotoMenuOpen ? 'overflow-visible z-50' : 'overflow-hidden'
       } ${
         isPathHighlighted
@@ -431,10 +430,10 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
           : isFocused
           ? 'border-[#2563EB] shadow-[0_4px_16px_rgba(37,99,235,0.14)] z-20'
           : isHovered
-          ? 'border-slate-500 -translate-y-0.5 shadow-[0_8px_24px_rgba(100,116,139,0.25)] z-20'
+          ? 'border-slate-400 -translate-y-0.5 shadow-md z-20'
           : isHoverRelated
-          ? 'border-slate-500 shadow-[0_4px_16px_rgba(100,116,139,0.18)]'
-          : 'border-slate-400 shadow-[0_2px_10px_rgba(15,23,42,0.08)] hover:border-slate-600 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(100,116,139,0.2)]'
+          ? 'border-slate-300 shadow-sm'
+          : 'border-slate-300 shadow-sm hover:border-slate-400 hover:-translate-y-0.5 hover:shadow-md'
       } ${isDimmed ? 'opacity-55' : isHoverRelated || isFocused ? 'opacity-95' : 'opacity-100'}`}
     >
       {/* Top Handle (Parent connections) */}
@@ -442,7 +441,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
         type="target"
         position={Position.Top}
         id="top"
-        className="!w-2 !h-2 !bg-[#2563EB] !border-[1.5px] !border-white !-top-1"
+        className="!opacity-0 !bg-transparent !border-0 !w-1 !h-1 pointer-events-none"
       />
 
       {/* Left Handle (Spouse connection from Left) */}
@@ -450,7 +449,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
         type="target"
         position={Position.Left}
         id="left"
-        className="!w-1.5 !h-1.5 !bg-[#2563EB] !border-none !-left-1"
+        className="!opacity-0 !bg-transparent !border-0 !w-1 !h-1 pointer-events-none"
       />
 
       {/* Right Handle (Spouse connection to Right) */}
@@ -458,7 +457,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
         type="source"
         position={Position.Right}
         id="right"
-        className="!w-1.5 !h-1.5 !bg-[#2563EB] !border-none !-right-1"
+        className="!opacity-0 !bg-transparent !border-0 !w-1 !h-1 pointer-events-none"
       />
 
       {/* Bottom Handle (Child connections) */}
@@ -466,21 +465,20 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
         type="source"
         position={Position.Bottom}
         id="bottom"
-        className="!w-2 !h-2 !bg-[#2563EB] !border-[1.5px] !border-white !-bottom-1"
+        className="!opacity-0 !bg-transparent !border-0 !w-1 !h-1 pointer-events-none"
       />
 
-      {/* Floating Action Pill Menu for Selected Member (Popup editbar with #D3D3D3 bg and dark text) */}
+      {/* Floating Action Pill Menu for Selected Member (Popup editbar with light backdrop and dark text) */}
       {isSelected && (
         <div
           onClick={(e) => e.stopPropagation()}
           data-testid={`node-popup-editbar-${member.id}`}
-          style={{ backgroundColor: '#D3D3D3' }}
-          className="absolute -top-11 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 px-1.5 py-1 rounded-xl bg-[#D3D3D3] shadow-lg border border-slate-400 text-[11px] whitespace-nowrap text-[#17233C]"
+          className="absolute -top-11 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 px-1.5 py-1 rounded-xl bg-white/95 backdrop-blur-xs shadow-lg border border-slate-300 text-[11px] whitespace-nowrap text-[#17233C]"
         >
           <button
             type="button"
             onClick={() => onOpenProfile?.(member)}
-            className="px-2.5 py-1 rounded-lg hover:bg-slate-300 text-[#17233C] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+            className="px-2.5 py-1 rounded-lg hover:bg-slate-100 text-[#17233C] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
             title="View Profile Details"
           >
             <User className="w-3.5 h-3.5 text-[#2563EB]" />
@@ -488,11 +486,11 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
           </button>
           {canEdit && (
             <>
-              <div className="w-[1px] h-3.5 bg-slate-400" />
+              <div className="w-[1px] h-3.5 bg-slate-300" />
               <button
                 type="button"
                 onClick={() => onEditProfile?.(member)}
-                className="px-2.5 py-1 rounded-lg hover:bg-slate-300 text-[#17233C] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-2.5 py-1 rounded-lg hover:bg-slate-100 text-[#17233C] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
                 title="Edit Member Profile"
               >
                 <Pencil className="w-3.5 h-3.5 text-[#2563EB]" />
@@ -500,11 +498,11 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
               </button>
             </>
           )}
-          <div className="w-[1px] h-3.5 bg-slate-400" />
+          <div className="w-[1px] h-3.5 bg-slate-300" />
           <button
             type="button"
             onClick={() => onExploreKinship?.(member)}
-            className="px-2.5 py-1 rounded-lg hover:bg-slate-300 text-[#17233C] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+            className="px-2.5 py-1 rounded-lg hover:bg-slate-100 text-[#17233C] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
             title="Calculate Kinship"
           >
             <GitFork className="w-3.5 h-3.5 text-[#2563EB]" />
