@@ -515,11 +515,15 @@ export class BranchService {
         const stdName = formatStandardBranchName(b.name);
         const normKey = stdName.toLowerCase();
         if (!canonicalBranchesByNormName.has(normKey)) {
-          if (b.name !== stdName) {
-            b.name = stdName;
-            await b.save();
-          }
           canonicalBranchesByNormName.set(normKey, b);
+          if (b.name !== stdName) {
+            try {
+              b.name = stdName;
+              await b.save();
+            } catch {
+              // Ignore duplicate rename conflict
+            }
+          }
         } else {
           // Duplicate branch found
           const canonical = canonicalBranchesByNormName.get(normKey);
@@ -623,21 +627,34 @@ export class BranchService {
           }
 
           if (!branch) {
-            branch = await Branch.create({
-              familyId: familyOid,
-              name: branchName,
-              description: `Dedicated lineage branch established for ${rawMemberName} and descendants.`,
-              rootMemberId: member._id,
-              accentColor: '#2563EB',
-              createdBy: context?.userId || 'system',
-              visibility: BranchVisibility.FAMILY,
-            });
-            canonicalBranchesByNormName.set(normKey, branch);
+            try {
+              branch = await Branch.create({
+                familyId: familyOid,
+                name: branchName,
+                description: `Dedicated lineage branch established for ${rawMemberName} and descendants.`,
+                rootMemberId: member._id,
+                accentColor: '#2563EB',
+                createdBy: context?.userId || 'system',
+                visibility: BranchVisibility.FAMILY,
+              });
+              canonicalBranchesByNormName.set(normKey, branch);
+            } catch {
+              branch = await Branch.findOne({ familyId: familyOid, name: branchName });
+              if (branch) {
+                canonicalBranchesByNormName.set(normKey, branch);
+              }
+            }
           } else if (branch.name !== branchName) {
-            branch.name = branchName;
-            await branch.save();
-            canonicalBranchesByNormName.set(normKey, branch);
+            try {
+              branch.name = branchName;
+              await branch.save();
+              canonicalBranchesByNormName.set(normKey, branch);
+            } catch {
+              // Ignore duplicate rename conflict
+            }
           }
+
+          if (!branch) continue;
 
           const branchOid = branch._id;
 

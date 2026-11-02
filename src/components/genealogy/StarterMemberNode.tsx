@@ -67,25 +67,25 @@ export const StarterMemberNode: React.FC<NodeProps<StarterNodeData>> = memo(({ d
         type="target"
         position={Position.Left}
         id="left"
-        className="!w-2 !h-2 !bg-[#7EA7D9] !border-[1.5px] !border-white !-left-1 opacity-80"
+        className="!opacity-0 !bg-transparent !border-0 !w-1 !h-1 pointer-events-none"
       />
       <Handle
         type="source"
         position={Position.Right}
         id="right"
-        className="!w-2 !h-2 !bg-[#7EA7D9] !border-[1.5px] !border-white !-right-1 opacity-80"
+        className="!opacity-0 !bg-transparent !border-0 !w-1 !h-1 pointer-events-none"
       />
       <Handle
         type="target"
         position={Position.Top}
         id="top"
-        className="!w-2 !h-2 !bg-[#7EA7D9] !border-[1.5px] !border-white !-top-1 opacity-40"
+        className="!opacity-0 !bg-transparent !border-0 !w-1 !h-1 pointer-events-none"
       />
       <Handle
         type="source"
         position={Position.Bottom}
         id="bottom"
-        className="!w-2 !h-2 !bg-[#7EA7D9] !border-[1.5px] !border-white !-bottom-1 opacity-40"
+        className="!opacity-0 !bg-transparent !border-0 !w-1 !h-1 pointer-events-none"
       />
 
       {/* Subtle Top Accent Bar */}

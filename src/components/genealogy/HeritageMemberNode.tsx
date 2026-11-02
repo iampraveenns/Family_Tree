@@ -216,6 +216,14 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
   const effectiveCanAddRelatives = canAddRelatives !== undefined ? canAddRelatives : (canEdit && !isUserSelfNode);
   const shouldHideActions = Boolean(hideRelationshipActions || isSecondarySpouse || !effectiveCanAddRelatives);
 
+  const memberHasSpouse = Boolean(
+    hasSpouse ||
+    isSecondarySpouse ||
+    (member as any).spouseId ||
+    ((member as any).spouses && (member as any).spouses.length > 0) ||
+    ((member as any).spouseIds && (member as any).spouseIds.length > 0)
+  );
+
   // Subtle branch accent color mapping using harmonious blue shades
   const getBranchConfig = () => {
     const branchKey = (member.branchName || member.branchId || '').toLowerCase();
@@ -798,22 +806,37 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
             </button>
             <button
               type="button"
+              disabled={memberHasSpouse}
               onClick={(e) => {
                 e.stopPropagation();
-                onAddRelative?.(member, 'SPOUSE');
+                if (!memberHasSpouse) {
+                  onAddRelative?.(member, 'SPOUSE');
+                }
               }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+                if ((e.key === 'Enter' || e.key === ' ') && !memberHasSpouse) {
                   e.preventDefault();
                   e.stopPropagation();
                   onAddRelative?.(member, 'SPOUSE');
                 }
               }}
-              title="Add Spouse to this member"
-              aria-label={`Add Spouse to ${fullName}`}
-              className="px-2 py-0.5 rounded bg-white hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#7EA7D9] text-[#17233C] border border-[#B8D4FF] font-medium text-[10.5px] transition-colors cursor-pointer shadow-2xs select-none"
+              title={
+                memberHasSpouse
+                  ? 'This member already has a spouse'
+                  : 'Add Spouse to this member'
+              }
+              aria-label={
+                memberHasSpouse
+                  ? `${fullName} already has a spouse`
+                  : `Add Spouse to ${fullName}`
+              }
+              className={`px-2 py-0.5 rounded font-medium text-[10.5px] transition-colors shadow-2xs select-none ${
+                memberHasSpouse
+                  ? 'opacity-40 cursor-not-allowed pointer-events-none bg-white/50 text-[#17233C]/40 border border-[#B8D4FF]/40'
+                  : 'bg-white hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#7EA7D9] text-[#17233C] border border-[#B8D4FF] cursor-pointer'
+              }`}
             >
               + Spouse
             </button>

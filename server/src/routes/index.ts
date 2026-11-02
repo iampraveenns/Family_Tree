@@ -15,6 +15,7 @@ apiRouter.use('/families', familyRoutes);
 apiRouter.use('/memories', memoryRoutes);
 apiRouter.use('/media', mediaRoutes);
 apiRouter.use('/super-admin', superAdminRoutes);
+apiRouter.use('/master-admin', superAdminRoutes);
 apiRouter.use('/', topLevelRoutes);
 
 export default apiRouter;

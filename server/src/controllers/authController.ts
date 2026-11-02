@@ -10,7 +10,7 @@ export class AuthController {
   async register(_req: Request, _res: Response, next: NextFunction) {
     try {
       throw new ForbiddenError(
-        'Public registration is disabled. All Admin and Viewer accounts must be provisioned exclusively by the Super Admin.'
+        'Public registration is disabled. All Admin and Viewer accounts must be provisioned exclusively by the Master Admin.'
       );
     } catch (error) {
       next(error);
@@ -19,12 +19,27 @@ export class AuthController {
 
   async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const { email, password } = req.body;
+      const email = req.body?.email || req.body?.identifier || req.body?.viewerCode;
+      const { password } = req.body;
       const ip = req.ip || req.socket.remoteAddress;
       const userAgent = req.get('user-agent');
 
       const result = await authService.login({ email, password, ip, userAgent });
       sendSuccess(res, result, 'Login successful');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async masterLogin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const email = req.body?.email || (req.query?.email as string) || req.body?.identifier;
+      const password = req.body?.password || (req.query?.password as string);
+      const ip = req.ip || req.socket.remoteAddress;
+      const userAgent = req.get('user-agent');
+
+      const result = await authService.masterLogin({ email, password, ip, userAgent });
+      sendSuccess(res, result, 'Master Admin login successful');
     } catch (error) {
       next(error);
     }

@@ -81,6 +81,17 @@ export function createApp(): Express {
   // Global authentication extractor (populates req.user if Bearer token present)
   app.use(authenticate);
 
+  // Master Admin direct login routing (/auth/masterlogin)
+  app.all('/auth/masterlogin', (req, res, next) => {
+    if (req.method === 'POST' || req.headers.accept?.includes('application/json')) {
+      import('./controllers/authController.ts').then(({ authController }) => {
+        authController.masterLogin(req, res, next);
+      }).catch(next);
+      return;
+    }
+    next();
+  });
+
   // API Routes
   app.use('/api', apiRouter);
 

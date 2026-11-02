@@ -304,6 +304,11 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
       return;
     }
 
+    if (!editMember && relationshipType === 'SPOUSE' && referenceMember && referenceMemberHasSpouse) {
+      setFormError(`${referenceMember.firstName} already has a spouse.`);
+      return;
+    }
+
     if (relationshipType === 'SPOUSE' && !marriageDate.trim()) {
       setFormError('Marriage date (DOM) is compulsory when adding a spouse.');
       return;

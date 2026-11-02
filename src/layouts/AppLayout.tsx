@@ -24,7 +24,10 @@ export const AppLayout: React.FC = () => {
     navigate('/');
   };
 
-  const isSuperAdmin = role === 'SUPER_ADMIN' || location.pathname.startsWith('/super-admin');
+  const isSuperAdmin =
+    role === 'SUPER_ADMIN' ||
+    location.pathname.startsWith('/master-admin') ||
+    location.pathname.startsWith('/super-admin');
   const isViewer = role === 'VIEWER';
 
   return (
@@ -34,7 +37,7 @@ export const AppLayout: React.FC = () => {
         {/* Left: Brand Application Name & Active Role Indicator Stacked Directly Below */}
         <div className="flex items-center gap-3">
           <Link
-            to={isSuperAdmin ? '/super-admin/dashboard' : '/family/tree'}
+            to={isSuperAdmin ? '/master-admin/dashboard' : '/family/tree'}
             className="flex items-center gap-2.5 hover:opacity-95"
             title="FamilyTree Navigation"
           >
@@ -49,7 +52,7 @@ export const AppLayout: React.FC = () => {
               {isSuperAdmin ? (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-1.5 py-0.5 rounded-md mt-0.5 shadow-2xs leading-none">
                   <ShieldAlert className="w-2.5 h-2.5 text-indigo-600" />
-                  <span>Super Admin</span>
+                  <span>Master Admin</span>
                 </span>
               ) : isViewer ? (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-200/80 px-1.5 py-0.5 rounded-md mt-0.5 shadow-2xs leading-none">
@@ -65,11 +68,11 @@ export const AppLayout: React.FC = () => {
             </div>
           </Link>
 
-          {/* Super Admin Status Indicator (Isolated from Family Tree) */}
+          {/* Master Admin Status Indicator (Isolated from Family Tree) */}
           {isSuperAdmin && (
             <div className="hidden sm:flex items-center ml-2 px-2.5 py-1 rounded-xl bg-indigo-50 border border-indigo-200 text-xs font-bold text-indigo-700 shadow-2xs">
               <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600 mr-1" />
-              <span>Super Admin Portal</span>
+              <span>Master Admin Portal</span>
             </div>
           )}
         </div>

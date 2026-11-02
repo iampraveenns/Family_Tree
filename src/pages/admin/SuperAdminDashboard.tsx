@@ -62,7 +62,7 @@ export const SuperAdminDashboard: React.FC = () => {
   const [viewerLoginCode, setViewerLoginCode] = useState('');
   const [viewerPassword, setViewerPassword] = useState('');
 
-  // Super Admin Account Settings states
+  // Master Admin Account Settings states
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [superEmailInput, setSuperEmailInput] = useState('superadmin@familyroots.heritage');
   const [superPasswordInput, setSuperPasswordInput] = useState('');
@@ -131,12 +131,12 @@ export const SuperAdminDashboard: React.FC = () => {
     setSettingsSuccess(null);
 
     if (!superEmailInput.trim()) {
-      setSettingsError('Super Admin email address is required.');
+      setSettingsError('Master Admin email address is required.');
       return;
     }
 
     if (superPasswordInput && superPasswordInput.length < 4) {
-      setSettingsError('Super Admin password must be at least 4 characters long.');
+      setSettingsError('Master Admin password must be at least 4 characters long.');
       return;
     }
 
@@ -161,8 +161,8 @@ export const SuperAdminDashboard: React.FC = () => {
         throw new Error(json.error?.message || json.message || 'Failed to update credentials');
       }
 
-      setSettingsSuccess('Super Admin credentials updated successfully and persisted in SQL database.');
-      success('Super Admin credentials updated successfully in SQL database.', 'Credentials Saved');
+      setSettingsSuccess('Master Admin credentials updated successfully and persisted in SQL database.');
+      success('Master Admin credentials updated successfully in SQL database.', 'Credentials Saved');
 
       setTimeout(() => {
         setIsSettingsModalOpen(false);
@@ -277,10 +277,10 @@ export const SuperAdminDashboard: React.FC = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-black text-[#0F172A] tracking-tight">
-                  Super Admin Application Dashboard
+                  Master Admin Application Dashboard
                 </h1>
                 <p className="text-xs text-[#64748B] font-medium">
-                  Centralized Customer Provisioning, Family Tree Tenant Management & SQL Database
+                  Centralized Customer Provisioning, Family Tree Administration & Database Management
                 </p>
               </div>
             </div>
@@ -607,7 +607,7 @@ export const SuperAdminDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Super Admin Account Settings Modal */}
+        {/* Master Admin Account Settings Modal */}
         <Modal
           isOpen={isSettingsModalOpen}
           onClose={() => {
@@ -617,8 +617,8 @@ export const SuperAdminDashboard: React.FC = () => {
               setSettingsSuccess(null);
             }
           }}
-          title="Super Admin Account Settings"
-          description="Update your Master Super Admin login credentials. New credentials will be immediately persisted in the SQL database for subsequent logins."
+          title="Master Admin Account Settings"
+          description="Update your Master Admin login credentials. New credentials will be immediately persisted in the SQL database for subsequent logins."
           maxWidth="md"
         >
           <form onSubmit={handleSaveAccountSettings} className="space-y-4">
@@ -637,7 +637,7 @@ export const SuperAdminDashboard: React.FC = () => {
             )}
 
             <Input
-              label="Super Admin Email *"
+              label="Master Admin Email *"
               type="email"
               value={superEmailInput}
               onChange={(e) => setSuperEmailInput(e.target.value)}
@@ -648,7 +648,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
             <div className="pt-1">
               <Input
-                label="New Super Admin Password (leave blank to keep current)"
+                label="New Master Admin Password (leave blank to keep current)"
                 type="password"
                 value={superPasswordInput}
                 onChange={(e) => setSuperPasswordInput(e.target.value)}

@@ -280,7 +280,7 @@ export class SuperAdminController {
       const password = req.body.password || req.body.adminPassword;
 
       if (!email || !email.trim()) {
-        throw new ValidationError('Super Admin email is required');
+        throw new ValidationError('Master Admin email is required');
       }
 
       const { authService } = await import('../services/authService.ts');
@@ -289,7 +289,7 @@ export class SuperAdminController {
         password: password ? password.trim() : undefined,
       });
 
-      sendSuccess(res, updated, 'Super Admin credentials updated successfully in SQL database');
+      sendSuccess(res, updated, 'Master Admin credentials updated successfully');
     } catch (err) {
       next(err);
     }

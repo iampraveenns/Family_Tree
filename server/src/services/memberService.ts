@@ -16,6 +16,8 @@ import { NotFoundError, ValidationError, ForbiddenError } from '../utils/errors.
 import { AuditAction, ErrorCode, Role, DEFAULT_ROLE_PERMISSIONS, BranchVisibility, normalizeRole } from '../constants/index.ts';
 import { ServiceContext } from './familyService.ts';
 
+import { formatStandardBranchName } from './branchService.ts';
+
 export class MemberService {
   private async resolveAndValidateBranchIds(
     familyId: string,
@@ -33,49 +35,53 @@ export class MemberService {
 
       // 1. If it's a valid 24-character ObjectId
       if (Types.ObjectId.isValid(bIdStr)) {
-        const branch = await branchRepository.findByFamilyAndId(familyId, bIdStr);
-        if (!branch) {
-          throw new ValidationError(`Branch '${bIdStr}' does not belong to family '${familyId}'`);
+        try {
+          const branch = await branchRepository.findByFamilyAndId(familyId, bIdStr);
+          if (branch) {
+            const oidStr = branch._id.toString();
+            if (!seen.has(oidStr)) {
+              seen.add(oidStr);
+              resolvedOids.push(branch._id);
+            }
+            continue;
+          }
+        } catch {
+          // Gracefully continue to slug or name lookup
         }
-        const oidStr = branch._id.toString();
-        if (!seen.has(oidStr)) {
-          seen.add(oidStr);
-          resolvedOids.push(branch._id);
-        }
-        continue;
       }
 
-      // 2. If it's a slug or branch name (e.g. 'branch-arun-branch' or 'Arun Branch')
+      // 2. If it's a slug or branch name (e.g. 'branch-aaa-a-branch' or 'Aaa A Branch')
       const cleanName = bIdStr.replace(/^branch-/, '').replace(/[-_]/g, ' ').trim();
-      let branch = await branchRepository.findByName(familyId, cleanName);
-      if (!branch) {
-        branch = await Branch.findOne({
-          familyId: new Types.ObjectId(familyId),
-          $or: [
-            { name: { $regex: new RegExp(`^${cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
-            { name: { $regex: new RegExp(`^${bIdStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
-          ],
-        }).exec();
-      }
+      if (!cleanName) continue;
+      const standardName = formatStandardBranchName(cleanName);
 
-      if (branch) {
-        const oidStr = branch._id.toString();
-        if (!seen.has(oidStr)) {
-          seen.add(oidStr);
-          resolvedOids.push(branch._id);
+      try {
+        let branch = await branchRepository.findByName(familyId, standardName);
+        if (!branch) {
+          branch = await branchRepository.findByName(familyId, cleanName);
         }
-        continue;
-      }
+        if (!branch) {
+          branch = await Branch.findOne({
+            familyId: new Types.ObjectId(familyId),
+            $or: [
+              { name: { $regex: new RegExp(`^${standardName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+              { name: { $regex: new RegExp(`^${cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+              { name: { $regex: new RegExp(`^${bIdStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+            ],
+          }).exec();
+        }
 
-      // 3. Dynamic lineage branch slug (e.g. 'branch-arun-branch')
-      // Auto-create or resolve the branch so it becomes a persisted first-class branch for the family
-      if (bIdStr.startsWith('branch-') || bIdStr.toLowerCase().includes('branch') || cleanName.length > 0) {
-        const formattedName = cleanName
-          .split(' ')
-          .filter(Boolean)
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-          .join(' ');
+        if (branch) {
+          const oidStr = branch._id.toString();
+          if (!seen.has(oidStr)) {
+            seen.add(oidStr);
+            resolvedOids.push(branch._id);
+          }
+          continue;
+        }
 
+        // 3. Dynamic lineage branch slug (e.g. 'branch-arun-branch')
+        // Auto-create or resolve the branch safely without throwing duplicate key errors
         let rootMemId = fallbackRootMemberId;
         if (!rootMemId || !Types.ObjectId.isValid(rootMemId.toString())) {
           const firstMem = await FamilyMember.findOne({ familyId: new Types.ObjectId(familyId) }).exec();
@@ -83,26 +89,38 @@ export class MemberService {
         }
 
         if (rootMemId && Types.ObjectId.isValid(rootMemId.toString())) {
-          const newBranch = await branchRepository.create({
-            familyId: new Types.ObjectId(familyId),
-            name: formattedName || 'Family Branch',
-            description: `${formattedName || 'Lineage'} Branch of family`,
-            rootMemberId: new Types.ObjectId(rootMemId.toString()),
-            createdBy: context?.userId || 'system',
-            visibility: BranchVisibility.FAMILY,
-          });
-          const oidStr = newBranch._id.toString();
-          if (!seen.has(oidStr)) {
-            seen.add(oidStr);
-            resolvedOids.push(newBranch._id);
+          try {
+            const newBranch = await branchRepository.create({
+              familyId: new Types.ObjectId(familyId),
+              name: standardName || 'Family Branch',
+              description: `${standardName || 'Lineage'} Branch of family`,
+              rootMemberId: new Types.ObjectId(rootMemId.toString()),
+              createdBy: context?.userId || 'system',
+              visibility: BranchVisibility.FAMILY,
+            });
+            const oidStr = newBranch._id.toString();
+            if (!seen.has(oidStr)) {
+              seen.add(oidStr);
+              resolvedOids.push(newBranch._id);
+            }
+          } catch {
+            const existing = await Branch.findOne({
+              familyId: new Types.ObjectId(familyId),
+              name: standardName,
+            }).exec();
+            if (existing) {
+              const oidStr = existing._id.toString();
+              if (!seen.has(oidStr)) {
+                seen.add(oidStr);
+                resolvedOids.push(existing._id);
+              }
+            }
           }
           continue;
         }
-        // If no root member available, skip pseudo-id gracefully without crashing
-        continue;
+      } catch (err) {
+        console.warn('Graceful branch resolution warning:', err);
       }
-
-      throw new ValidationError(`Branch '${bIdStr}' does not belong to family '${familyId}'`);
     }
 
     return resolvedOids;

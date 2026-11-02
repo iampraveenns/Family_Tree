@@ -208,7 +208,7 @@ export class MediaService {
     const storageService = getMediaStorageService();
 
     // Security Verification:
-    // Either valid signed token OR valid authenticated user with memory access
+    // Either valid signed token OR valid authenticated user with memory access OR ambient family vault media access
     let authorized = false;
 
     if (options.token && options.expires) {
@@ -218,7 +218,9 @@ export class MediaService {
         options.expires,
         !!options.isThumbnail
       );
-    } else if (options.actorUserId) {
+    }
+
+    if (!authorized && options.actorUserId) {
       const memory = await memoryRepository.findById(media.memoryId);
       if (memory) {
         const auth = await authorizationService.canViewMemory(
@@ -228,10 +230,12 @@ export class MediaService {
         );
         authorized = auth.allowed;
       }
-    } else {
+    }
+
+    if (!authorized) {
       // Direct stream request from <audio>, <video>, or <img> tag in the family vault
       const memory = await memoryRepository.findById(media.memoryId);
-      if (memory && (memory.status === 'ACTIVE' || memory.visibility === 'FAMILY' || memory.visibility === 'PUBLIC')) {
+      if (!memory || memory.status === 'ACTIVE' || memory.visibility === 'FAMILY' || memory.visibility === 'PUBLIC') {
         authorized = true;
       }
     }
@@ -247,13 +251,36 @@ export class MediaService {
 
     const mimeType = options.isThumbnail ? 'image/webp' : media.mimeType;
 
-    const streamResult = await storageService.getFileStream(storageKey, options.range);
+    // Direct redirect if storageKey is an HTTP(S) or data URL
+    if (storageKey.startsWith('http://') || storageKey.startsWith('https://') || storageKey.startsWith('data:')) {
+      return {
+        redirectUrl: storageKey,
+        mimeType,
+        fileName: media.originalFileName,
+        totalSize: media.fileSize || 0,
+        contentLength: media.fileSize || 0,
+      };
+    }
 
-    return {
-      ...streamResult,
-      mimeType,
-      fileName: media.originalFileName,
-    };
+    try {
+      const streamResult = await storageService.getFileStream(storageKey, options.range);
+      return {
+        ...streamResult,
+        mimeType,
+        fileName: media.originalFileName,
+      };
+    } catch (fsErr) {
+      if (media.storageKey && (media.storageKey.startsWith('http://') || media.storageKey.startsWith('https://'))) {
+        return {
+          redirectUrl: media.storageKey,
+          mimeType,
+          fileName: media.originalFileName,
+          totalSize: media.fileSize || 0,
+          contentLength: media.fileSize || 0,
+        };
+      }
+      throw fsErr;
+    }
   }
 
   async deleteMedia(mediaId: string, actorUserId: string) {

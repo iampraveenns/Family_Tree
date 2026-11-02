@@ -56,27 +56,33 @@ export class MediaController {
         range,
       });
 
+      const streamRes = streamResult as any;
+      if (streamRes.redirectUrl) {
+        res.redirect(streamRes.redirectUrl);
+        return;
+      }
+
       res.set({
-        'Content-Type': streamResult.mimeType || 'application/octet-stream',
+        'Content-Type': streamRes.mimeType || 'application/octet-stream',
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'private, max-age=3600',
         'Content-Disposition': download
-          ? `attachment; filename="${encodeURIComponent(streamResult.fileName)}"`
-          : `inline; filename="${encodeURIComponent(streamResult.fileName)}"`,
+          ? `attachment; filename="${encodeURIComponent(streamRes.fileName)}"`
+          : `inline; filename="${encodeURIComponent(streamRes.fileName)}"`,
       });
 
-      if (streamResult.contentRange) {
+      if (streamRes.contentRange) {
         res.status(206);
         res.set({
-          'Content-Range': streamResult.contentRange,
-          'Content-Length': String(streamResult.contentLength),
+          'Content-Range': streamRes.contentRange,
+          'Content-Length': String(streamRes.contentLength),
         });
       } else {
         res.status(200);
-        res.set('Content-Length', String(streamResult.contentLength));
+        res.set('Content-Length', String(streamRes.contentLength));
       }
 
-      streamResult.stream.pipe(res);
+      streamRes.stream?.pipe(res);
     } catch (err) {
       next(err);
     }
@@ -95,13 +101,19 @@ export class MediaController {
         actorUserId: req.user?.userId,
       });
 
+      const streamRes = streamResult as any;
+      if (streamRes.redirectUrl) {
+        res.redirect(streamRes.redirectUrl);
+        return;
+      }
+
       res.set({
         'Content-Type': 'image/webp',
-        'Content-Length': String(streamResult.contentLength),
+        'Content-Length': String(streamRes.contentLength),
         'Cache-Control': 'public, max-age=86400', // 24h cache for processed thumbs
       });
 
-      streamResult.stream.pipe(res);
+      streamRes.stream?.pipe(res);
     } catch (err) {
       next(err);
     }

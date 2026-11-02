@@ -12,7 +12,43 @@ export class MembershipRepository {
     if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(familyId)) return null;
     const userObjId = typeof userId === 'string' ? new Types.ObjectId(userId) : userId;
     const famObjId = typeof familyId === 'string' ? new Types.ObjectId(familyId) : familyId;
-    return FamilyMembership.findOne({ userId: userObjId, familyId: famObjId }).exec();
+    let membership = await FamilyMembership.findOne({ userId: userObjId, familyId: famObjId }).exec();
+
+    if (!membership) {
+      // Auto-reconcile membership for authenticated users if assigned to this family or Super Admin
+      try {
+        const { User } = await import('../models/User.ts');
+        const { DEFAULT_ROLE_PERMISSIONS } = await import('../constants/index.ts');
+        const user = await User.findById(userObjId);
+        if (user) {
+          const isSuperAdmin = user.role === Role.SUPER_ADMIN;
+          const isAdmin = user.role === Role.ADMIN;
+          const isViewer = user.role === Role.VIEWER;
+          const isAssignedFamily = !user.familyTreeId || user.familyTreeId === famObjId.toString();
+
+          if (isSuperAdmin || (isAdmin && isAssignedFamily) || (isViewer && isAssignedFamily)) {
+            const role = isSuperAdmin || isAdmin ? Role.ADMIN : Role.VIEWER;
+            membership = await FamilyMembership.findOneAndUpdate(
+              { userId: userObjId, familyId: famObjId },
+              {
+                $setOnInsert: {
+                  userId: userObjId,
+                  familyId: famObjId,
+                  role,
+                  status: 'ACTIVE',
+                  permissions: DEFAULT_ROLE_PERMISSIONS[role],
+                },
+              },
+              { upsert: true, new: true }
+            ).exec();
+          }
+        }
+      } catch (reconcileErr) {
+        console.warn('Membership auto-reconcile note:', reconcileErr);
+      }
+    }
+
+    return membership;
   }
 
   async findByUser(userId: string | Types.ObjectId): Promise<IFamilyMembership[]> {

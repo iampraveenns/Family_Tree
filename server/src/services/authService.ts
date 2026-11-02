@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { userRepository } from '../repositories/userRepository.ts';
 import { refreshTokenRepository } from '../repositories/refreshTokenRepository.ts';
 import { membershipRepository } from '../repositories/membershipRepository.ts';
@@ -232,6 +233,27 @@ export class AuthService {
       }
     }
 
+    // Ensure active membership exists in MongoDB for targetFamilyId
+    const targetFamilyId = familyTreeId || user.familyTreeId;
+    if (targetFamilyId && Types.ObjectId.isValid(targetFamilyId)) {
+      const famOid = new Types.ObjectId(targetFamilyId);
+      const effectiveRole = role === Role.SUPER_ADMIN || role === Role.ADMIN ? Role.ADMIN : Role.VIEWER;
+      await FamilyMembership.findOneAndUpdate(
+        { userId: user._id, familyId: famOid },
+        {
+          $setOnInsert: {
+            userId: user._id,
+            familyId: famOid,
+            role: effectiveRole,
+            status: 'ACTIVE',
+            permissions: DEFAULT_ROLE_PERMISSIONS[effectiveRole],
+            memberId: linkedMember ? linkedMember._id : undefined,
+          },
+        },
+        { upsert: true }
+      );
+    }
+
     const memberships = await membershipRepository.findByUser(user._id);
 
     return {
@@ -263,12 +285,15 @@ export class AuthService {
   async login(data: { email: string; password: string; ip?: string; userAgent?: string }) {
     const identifier = data.email.toLowerCase().trim();
 
-    // 1. Super Admin (Single Master Account stored in SQL Database)
+    // 1. Master Admin (Single Master Account stored in SQL Database)
     const superCreds = sqlDatabase.getSuperAdminCredentials();
     const isSuperAdminIdentifier =
       identifier === superCreds.email.toLowerCase().trim() ||
       identifier === 'superadmin@familyroots.heritage' ||
-      identifier === 'superadmin';
+      identifier === 'superadmin' ||
+      identifier === 'masteradmin@familyroots.heritage' ||
+      identifier === 'masteradmin' ||
+      identifier === 'master';
 
     if (isSuperAdminIdentifier) {
       await this.ensureDemoUser(Role.SUPER_ADMIN);
@@ -286,7 +311,12 @@ export class AuthService {
         if (!isSuperPassValid && superUser.passwordHash) {
           isSuperPassValid = await SecurityUtils.comparePassword(data.password, superUser.passwordHash);
         }
-        if (!isSuperPassValid && (data.password === 'SuperAdmin#2026' || data.password === superCreds.password_hash)) {
+        if (
+          !isSuperPassValid &&
+          (data.password === 'SuperAdmin#2026' ||
+            data.password === 'MasterAdmin#2026' ||
+            data.password === superCreds.password_hash)
+        ) {
           isSuperPassValid = true;
         }
 
@@ -407,7 +437,22 @@ export class AuthService {
       }
     );
 
-    throw new UnauthorizedError('Account not registered or invalid credentials. Please sign up or contact Super Admin.');
+    throw new UnauthorizedError('Account not registered or invalid credentials. Please sign up or contact Master Admin.');
+  }
+
+  /**
+   * Master Admin Login endpoint helper
+   */
+  async masterLogin(data: { email?: string; password?: string; ip?: string; userAgent?: string }) {
+    const superCreds = sqlDatabase.getSuperAdminCredentials();
+    const email = data.email?.trim() || superCreds.email;
+    const password = data.password || 'SuperAdmin#2026';
+    return this.login({
+      email,
+      password,
+      ip: data.ip,
+      userAgent: data.userAgent,
+    });
   }
 
   /**
@@ -697,13 +742,13 @@ export class AuthService {
   async updateSuperAdminAccount(data: { email: string; password?: string }) {
     const newEmail = data.email.toLowerCase().trim();
     if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-      throw new ValidationError('A valid Super Admin email address is required');
+      throw new ValidationError('A valid Master Admin email address is required');
     }
 
     let passwordHash: string | undefined = undefined;
     if (data.password && data.password.trim().length > 0) {
       if (data.password.length < 4) {
-        throw new ValidationError('Super Admin password must be at least 4 characters long');
+        throw new ValidationError('Master Admin password must be at least 4 characters long');
       }
       passwordHash = await SecurityUtils.hashPassword(data.password.trim());
     }
@@ -729,7 +774,7 @@ export class AuthService {
       await User.create({
         email: newEmail,
         passwordHash: initialHash,
-        displayName: 'Platform Super Admin',
+        displayName: 'Platform Master Admin',
         role: Role.SUPER_ADMIN,
         status: UserStatus.ACTIVE,
       });

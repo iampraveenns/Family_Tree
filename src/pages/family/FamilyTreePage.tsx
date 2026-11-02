@@ -91,11 +91,11 @@ const FamilyTreeInner: React.FC = () => {
   const reactFlowInstance = useReactFlow();
   const navigate = useNavigate();
 
-  // Super Admin Isolation: Super Admin role can ONLY access /super-admin/dashboard
+  // Master Admin Isolation: Master Admin role can ONLY access /master-admin/dashboard
   useEffect(() => {
     const role = typeof localStorage !== 'undefined' ? (localStorage.getItem('familyroots_user_role') || '').toUpperCase() : '';
     if (role === 'SUPER_ADMIN') {
-      navigate('/super-admin/dashboard', { replace: true });
+      navigate('/master-admin/dashboard', { replace: true });
     }
   }, [navigate]);
 
@@ -1362,10 +1362,12 @@ const FamilyTreeInner: React.FC = () => {
         location: formData.location || undefined,
         profilePhoto: formData.photoUrl || undefined,
         generation: calculatedGen,
-        branchIds: formData.branchId
+        branchIds: formData.branchId && !formData.branchId.startsWith('branch-')
           ? [formData.branchId]
-          : refMember!.branchId
-          ? [refMember!.branchId]
+          : refMember?.branchIds && refMember.branchIds.length > 0
+          ? refMember.branchIds.filter((bId: string) => typeof bId === 'string' && !bId.startsWith('branch-'))
+          : refMember?.branchId && !refMember.branchId.startsWith('branch-')
+          ? [refMember.branchId]
           : [],
         biography: formData.biography
           ? formData.notes
@@ -2986,7 +2988,7 @@ const FamilyTreeInner: React.FC = () => {
           {/* Action buttons */}
           <div className="pt-2 flex items-center justify-between border-t border-slate-200">
             <span className="text-[11px] text-slate-500 italic">
-              Permissions are managed exclusively by your tree Admin & Super Admin.
+              Permissions are managed exclusively by your tree Admin & Master Admin.
             </span>
             <button
               type="button"

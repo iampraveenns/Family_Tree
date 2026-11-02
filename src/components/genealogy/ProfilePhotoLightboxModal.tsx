@@ -120,11 +120,11 @@ export const ProfilePhotoLightboxModal: React.FC<ProfilePhotoLightboxModalProps>
 
             {/* Member Name Caption */}
             <div className="mt-3 text-center">
-              <h3 className="text-[#0F172A] text-base sm:text-lg font-bold tracking-wide">
+              <h3 className="text-white text-base sm:text-lg font-bold tracking-wide drop-shadow-md">
                 {fullName}
               </h3>
               {member.branchName && (
-                <p className="text-slate-600 text-xs sm:text-sm font-medium mt-0.5">
+                <p className="text-white/90 text-xs sm:text-sm font-medium mt-0.5 drop-shadow-md">
                   {member.branchName}
                 </p>
               )}
