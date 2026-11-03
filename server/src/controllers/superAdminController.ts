@@ -41,6 +41,8 @@ export class SuperAdminController {
           return {
             customer_id: cust.customer_id,
             customer_name: cust.customer_name,
+            customer_email: cust.customer_email || cust.admin_email,
+            admin_code: cust.admin_code || (cust.customer_id.startsWith('CUST-') ? `ADM-${cust.customer_id.slice(5)}` : 'ADM-1001'),
             admin_email: cust.admin_email,
             viewer_login_code: cust.viewer_login_code,
             family_tree_name: cust.family_tree_name,
@@ -61,11 +63,13 @@ export class SuperAdminController {
   /**
    * POST /api/super-admin/customers
    * Inserts record into SQL database, establishes a dedicated family tree,
-   * and creates Admin and Shared Viewer accounts.
+   * and creates Admin and Shared Viewer accounts with dedicated Admin Code and Customer Email.
    */
   async createCustomer(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const customer_name = req.body.customer_name || req.body.customerName;
+      const customer_email = req.body.customer_email || req.body.customerEmail;
+      const admin_code = req.body.admin_code || req.body.adminCode;
       const admin_email = req.body.admin_email || req.body.adminEmail;
       const admin_password = req.body.admin_password || req.body.adminPassword;
       const family_tree_name = req.body.family_tree_name || req.body.familyTreeName;
@@ -74,31 +78,37 @@ export class SuperAdminController {
       const viewer_password = req.body.viewer_password || req.body.viewerPassword;
 
       if (!customer_name || !customer_name.trim()) {
-        throw new ValidationError('Customer Name (Admin) is required');
+        throw new ValidationError('Customer Name is required');
       }
-      if (!admin_email || !admin_email.trim()) {
-        throw new ValidationError('Admin Email is required');
+      if (!customer_email || !customer_email.trim()) {
+        throw new ValidationError('Customer Email is required');
       }
       if (!family_tree_name || !family_tree_name.trim()) {
         throw new ValidationError('Family Tree Name is required');
       }
 
-      const cleanEmail = admin_email.toLowerCase().trim();
-      const existing = sqlDatabase.getCustomerByEmail(cleanEmail);
-      if (existing) {
-        throw new ConflictError(`An admin account with email ${cleanEmail} already exists in the SQL database.`);
-      }
-
-      // Generate or validate customer_id
+      // Generate or validate customer_id, admin_code, and viewer_login_code
       const finalCustomerId = (customer_id && customer_id.trim()) || sqlDatabase.getNextCustomerId();
       const numMatch = finalCustomerId.match(/\d+/);
-      const finalViewerCode = (viewer_login_code && viewer_login_code.trim()) ||
-        `VIEW-${numMatch ? numMatch[0] : '1001'}`;
+      const defaultSuffix = numMatch ? numMatch[0] : '1001';
 
-      const rawAdminPassword = (admin_password && admin_password.trim()) || 'AdminPassword#2026';
+      const finalAdminCode = (admin_code && admin_code.trim().toUpperCase()) ||
+        `ADM-${defaultSuffix}`;
+      const finalViewerCode = (viewer_login_code && viewer_login_code.trim().toUpperCase()) ||
+        `VIEW-${defaultSuffix}`;
+
+      const cleanCustomerEmail = customer_email.toLowerCase().trim();
+      const cleanAdminEmail = (admin_email && admin_email.trim().toLowerCase()) || cleanCustomerEmail;
+
+      const existingByCode = sqlDatabase.getCustomerByAdminCodeOrEmail(finalAdminCode);
+      if (existingByCode) {
+        throw new ConflictError(`An admin account with Admin Code ${finalAdminCode} already exists.`);
+      }
+
+      const rawAdminPassword = (admin_password && admin_password.trim()) || 'FamilyRoots#2026';
       const adminPasswordHash = await SecurityUtils.hashPassword(rawAdminPassword);
 
-      // 1. Establish the dedicated family tree in the database
+      // 1. Establish the dedicated family tree in MongoDB
       const newFamily = await Family.create({
         name: family_tree_name.trim(),
         description: `Family tree established for ${customer_name.trim()}`,
@@ -117,10 +127,10 @@ export class SuperAdminController {
       const familyTreeId = newFamily._id.toString();
 
       // 2. Create or sync Admin User in MongoDB
-      let adminUser = await User.findOne({ email: cleanEmail });
+      let adminUser = await User.findOne({ email: cleanAdminEmail });
       if (!adminUser) {
         adminUser = await User.create({
-          email: cleanEmail,
+          email: cleanAdminEmail,
           passwordHash: adminPasswordHash,
           displayName: customer_name.trim(),
           role: Role.ADMIN,
@@ -190,7 +200,9 @@ export class SuperAdminController {
       const createdRecord = sqlDatabase.createCustomer({
         customer_id: finalCustomerId,
         customer_name: customer_name.trim(),
-        admin_email: cleanEmail,
+        customer_email: cleanCustomerEmail,
+        admin_code: finalAdminCode,
+        admin_email: cleanAdminEmail,
         admin_password_hash: adminPasswordHash,
         viewer_login_code: finalViewerCode,
         viewer_password_hash: viewerPasswordHash,
@@ -207,6 +219,52 @@ export class SuperAdminController {
         },
         'Customer record and family tree initialized successfully in SQL database',
         201
+      );
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /api/super-admin/impersonate
+   * Allows Master Admin to view and inspect an individual family tree.
+   */
+  async impersonateTree(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const customerId = req.body.customerId || req.body.customer_id;
+      const familyTreeId = req.body.familyTreeId || req.body.family_tree_id;
+
+      let customer = null;
+      if (customerId) {
+        customer = sqlDatabase.getCustomerById(customerId);
+      } else if (familyTreeId) {
+        customer = sqlDatabase.getCustomerByFamilyTreeId(familyTreeId);
+      }
+
+      if (!customer) {
+        throw new NotFoundError('Customer or family tree record not found in SQL database');
+      }
+
+      const family = await Family.findById(customer.family_tree_id);
+      if (!family) {
+        throw new NotFoundError(`Family tree with ID ${customer.family_tree_id} not found in database`);
+      }
+
+      const { authService } = await import('../services/authService.ts');
+      const session = await authService.createImpersonationSession({
+        familyTreeId: customer.family_tree_id,
+        adminEmail: customer.admin_email || customer.customer_email || customer.admin_code,
+        customerName: customer.customer_name,
+        familyTreeName: customer.family_tree_name,
+      });
+
+      sendSuccess(
+        res,
+        {
+          ...session,
+          customer,
+        },
+        `Impersonation session established for ${customer.family_tree_name}`
       );
     } catch (err) {
       next(err);

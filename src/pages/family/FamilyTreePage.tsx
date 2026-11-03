@@ -91,10 +91,11 @@ const FamilyTreeInner: React.FC = () => {
   const reactFlowInstance = useReactFlow();
   const navigate = useNavigate();
 
-  // Master Admin Isolation: Master Admin role can ONLY access /master-admin/dashboard
+  // Master Admin Isolation: Master Admin role can ONLY access /master-admin/dashboard unless impersonating/inspecting a tree
   useEffect(() => {
     const role = typeof localStorage !== 'undefined' ? (localStorage.getItem('familyroots_user_role') || '').toUpperCase() : '';
-    if (role === 'SUPER_ADMIN') {
+    const isImpersonating = typeof localStorage !== 'undefined' && localStorage.getItem('familyroots_master_impersonation');
+    if (role === 'SUPER_ADMIN' && !isImpersonating) {
       navigate('/master-admin/dashboard', { replace: true });
     }
   }, [navigate]);
@@ -142,8 +143,6 @@ const FamilyTreeInner: React.FC = () => {
       fetchFamilyTree();
     }
   }, [currentFamily?.id, fetchFamilyTree, fetchPermissions, memories.length, events.length]);
-
-  const [isAuthoritiesModalOpen, setIsAuthoritiesModalOpen] = useState(false);
 
   // Strictly lock user permissions to the authenticated session role (SUPER_ADMIN, ADMIN, or VIEWER)
   const isAdmin = useMemo(() => {
@@ -1744,8 +1743,8 @@ const FamilyTreeInner: React.FC = () => {
             )}
           </div>
 
-          {/* Role-Specific Actions: All Options for Admin, View Authorities for Viewer */}
-          {isAdmin ? (
+          {/* Role-Specific Actions: Add Relative for Admin */}
+          {isAdmin && (
             <Button
               size="sm"
               leftIcon={<Plus className="w-3.5 h-3.5" />}
@@ -1772,16 +1771,6 @@ const FamilyTreeInner: React.FC = () => {
             >
               {members.length === 0 ? 'Add Starting Member' : 'Add Relative'}
             </Button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setIsAuthoritiesModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-300 text-xs font-bold text-[#0284C7] shadow-2xs transition-all cursor-pointer"
-              title="Click to view full Viewer authorities & permissions"
-            >
-              <Eye className="w-3.5 h-3.5 text-[#0284C7]" />
-              <span>View Authorities</span>
-            </button>
           )}
         </div>
       </div>
@@ -2893,113 +2882,6 @@ const FamilyTreeInner: React.FC = () => {
         />
       )}
 
-      {/* Phase 53: Viewer Authorities Breakdown Modal */}
-      <Modal
-        isOpen={isAuthoritiesModalOpen}
-        onClose={() => setIsAuthoritiesModalOpen(false)}
-        maxWidth="md"
-        title={
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-sky-100 text-[#0284C7] flex items-center justify-center shrink-0">
-              <Eye className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-[#0F172A] leading-snug">
-                Family Viewer Authorities
-              </h3>
-              <p className="text-[11px] text-[#475569] font-normal">
-                Transparent breakdown of your access authorities vs. Admin capabilities
-              </p>
-            </div>
-          </div>
-        }
-      >
-        <div className="space-y-4 pt-1">
-          {/* Active Role Card */}
-          <div className="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200 flex items-start gap-3">
-            <div className="w-7 h-7 rounded-lg bg-sky-200 text-[#0284C7] flex items-center justify-center shrink-0 mt-0.5">
-              <Eye className="w-4 h-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-[#0F172A]">Active Role: Family Viewer</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-[#0284C7]">
-                  Read-Only Tree
-                </span>
-              </div>
-              <p className="text-[11px] text-[#475569] mt-0.5">
-                You have view authorities across all branches, kinship paths, and member stories, and can contribute memories to the heritage vault.
-              </p>
-            </div>
-          </div>
-
-          {/* Authorities List (Allowed) */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold text-emerald-800 flex items-center gap-1.5 uppercase tracking-wider">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Your View Authorities (Allowed)</span>
-            </h4>
-            <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-1.5 text-xs text-emerald-950">
-              <div className="flex items-start gap-2">
-                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span><strong>Interactive Tree Canvas:</strong> Pan, zoom, generation alignment, and spouse linkages</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span><strong>Kinship Calculator:</strong> Calculate exact biological or adoptive kinship paths</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span><strong>Relative Profiles & Stories:</strong> View birth/death dates, places, occupations, and bios</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span><strong>Viewing Tools:</strong> Search relatives, branch filters, Fit Family, Focus Mode, Fullscreen & Map</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span><strong>Memory Contributions:</strong> Upload and tag photos, videos, audios, and memories in the vault</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Prohibited / Admin-Only Actions */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wider">
-              <Lock className="w-3.5 h-3.5 text-slate-500" />
-              <span>Admin-Only Operations (Hidden / Disabled for Viewer)</span>
-            </h4>
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 text-xs text-slate-600">
-              <div className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0 mt-1.5" />
-                <span><strong>+ Add Relative:</strong> Only the sole Family Admin can create tree member nodes</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0 mt-1.5" />
-                <span><strong>+ Child & + Spouse:</strong> Card and drawer mutation buttons are hidden for viewers</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0 mt-1.5" />
-                <span><strong>Profile & Relationship Edits:</strong> Editing names, marriage dates, life status, or deleting records is prohibited</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="pt-2 flex items-center justify-between border-t border-slate-200">
-            <span className="text-[11px] text-slate-500 italic">
-              Permissions are managed exclusively by your tree Admin & Master Admin.
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsAuthoritiesModalOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 };

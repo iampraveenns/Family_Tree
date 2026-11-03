@@ -107,7 +107,8 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
                 <video
                   src={videoUrl}
                   controls
-                  autoPlay
+                  playsInline
+                  preload="metadata"
                   className="w-full h-full max-h-[50vh] object-contain"
                 />
               ) : coverUrl ? (

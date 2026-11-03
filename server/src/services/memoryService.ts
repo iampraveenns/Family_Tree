@@ -16,6 +16,7 @@ import {
   Permission,
   Role,
   normalizeRole,
+  DEFAULT_ROLE_PERMISSIONS,
 } from '../constants/index.ts';
 import {
   NotFoundError,
@@ -227,12 +228,43 @@ export class MemoryService {
     return memory;
   }
 
+  private async ensureActiveMembership(actorUserId: string, familyId: string) {
+    let membership = await membershipRepository.findByUserAndFamily(actorUserId, familyId);
+    if (!membership || membership.status !== 'ACTIVE') {
+      try {
+        const { User } = await import('../models/User.ts');
+        const user = await User.findById(actorUserId);
+        if (user && Types.ObjectId.isValid(familyId)) {
+          const { FamilyMembership } = await import('../models/FamilyMembership.ts');
+          const isSuperOrAdmin = user.role === Role.SUPER_ADMIN || user.role === Role.ADMIN;
+          const assignedRole = isSuperOrAdmin ? Role.ADMIN : Role.VIEWER;
+          membership = await FamilyMembership.findOneAndUpdate(
+            { userId: user._id, familyId: new Types.ObjectId(familyId) },
+            {
+              $setOnInsert: {
+                userId: user._id,
+                familyId: new Types.ObjectId(familyId),
+                role: assignedRole,
+                status: 'ACTIVE',
+                permissions: DEFAULT_ROLE_PERMISSIONS[assignedRole],
+              },
+            },
+            { upsert: true, new: true }
+          );
+        }
+      } catch {
+        // Graceful fallback
+      }
+    }
+    return membership;
+  }
+
   async getMemories(
     familyId: string,
     actorUserId: string,
     filters: MemoryFilterOptions
   ) {
-    const membership = await membershipRepository.findByUserAndFamily(actorUserId, familyId);
+    const membership = await this.ensureActiveMembership(actorUserId, familyId);
     if (!membership || membership.status !== 'ACTIVE') {
       throw new ForbiddenError('Active membership required to browse family memories');
     }
@@ -490,7 +522,7 @@ export class MemoryService {
   }
 
   async getStats(familyId: string, actorUserId: string) {
-    const membership = await membershipRepository.findByUserAndFamily(actorUserId, familyId);
+    const membership = await this.ensureActiveMembership(actorUserId, familyId);
     if (!membership || membership.status !== 'ACTIVE') {
       throw new ForbiddenError('Active membership required to view memory stats');
     }
@@ -499,7 +531,7 @@ export class MemoryService {
   }
 
   async getOnThisDay(familyId: string, actorUserId: string) {
-    const membership = await membershipRepository.findByUserAndFamily(actorUserId, familyId);
+    const membership = await this.ensureActiveMembership(actorUserId, familyId);
     if (!membership || membership.status !== 'ACTIVE') {
       throw new ForbiddenError('Active membership required to access historic memories');
     }

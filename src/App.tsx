@@ -19,64 +19,29 @@ const SuperAdminDashboard = React.lazy(() =>
   import('./pages/admin/SuperAdminDashboard.tsx').then((m) => ({ default: m.SuperAdminDashboard }))
 );
 
+const MasterAdminAuthPage = React.lazy(() =>
+  import('./pages/admin/MasterAdminAuthPage.tsx').then((m) => ({ default: m.MasterAdminAuthPage }))
+);
+
 function RouteFallback() {
-  return <PageSkeleton />;
-}
-
-function MasterLoginRedirect() {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    let cancelled = false;
-    async function performMasterLogin() {
-      try {
-        const res = await fetch('/api/auth/masterlogin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-          body: JSON.stringify({}),
-        });
-        const json = await res.json().catch(() => null);
-        if (res.ok && json?.success && json?.data?.accessToken) {
-          setAuthTokens(json.data.accessToken, json.data.refreshToken);
-          localStorage.setItem('familyroots_user_role', 'SUPER_ADMIN');
-          if (!cancelled) {
-            navigate('/master-admin/dashboard', { replace: true });
-          }
-        } else {
-          if (!cancelled) {
-            navigate('/', { replace: true });
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          navigate('/', { replace: true });
-        }
-      }
-    }
-
-    performMasterLogin();
-    return () => {
-      cancelled = true;
-    };
-  }, [navigate]);
-
   return <PageSkeleton />;
 }
 
 function SuperAdminRoute({ children }: { children: React.ReactNode }) {
   const role = typeof localStorage !== 'undefined' ? (localStorage.getItem('familyroots_user_role') || '').toUpperCase() : '';
-  if (role && role !== 'SUPER_ADMIN') {
-    return <Navigate to="/family/tree" replace />;
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('familyroots_access_token') : null;
+
+  if (role !== 'SUPER_ADMIN' || !token) {
+    return <Navigate to="/auth/masterlogin" replace />;
   }
+
   return <>{children}</>;
 }
 
 function FamilyTreeRoute({ children }: { children: React.ReactNode }) {
   const role = typeof localStorage !== 'undefined' ? (localStorage.getItem('familyroots_user_role') || '').toUpperCase() : '';
-  if (role === 'SUPER_ADMIN') {
+  const isImpersonating = typeof localStorage !== 'undefined' && localStorage.getItem('familyroots_master_impersonation');
+  if (role === 'SUPER_ADMIN' && !isImpersonating) {
     return <Navigate to="/master-admin/dashboard" replace />;
   }
   return <>{children}</>;
@@ -116,8 +81,8 @@ export default function App() {
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/signup" element={<RegisterPage />} />
               <Route path="/login" element={<RegisterPage />} />
-              <Route path="/auth/masterlogin" element={<MasterLoginRedirect />} />
-              <Route path="/masterlogin" element={<MasterLoginRedirect />} />
+              <Route path="/auth/masterlogin" element={<MasterAdminAuthPage />} />
+              <Route path="/masterlogin" element={<MasterAdminAuthPage />} />
 
               {/* Application Layout for Family Tree & Master Admin Dashboard */}
               <Route element={<AppLayout />}>

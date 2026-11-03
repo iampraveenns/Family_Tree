@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles,
@@ -56,6 +56,10 @@ export const VideoMemoryCardPlayer: React.FC<VideoMemoryCardPlayerProps> = ({
   const videoUrl = useMemo(() => {
     return getMemoryVideoUrl(memory) || getMemoryCoverUrl(memory) || '';
   }, [memory]);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [videoUrl]);
 
   const handleMouseEnter = () => {
     if (videoRef.current && videoUrl && !hasError) {

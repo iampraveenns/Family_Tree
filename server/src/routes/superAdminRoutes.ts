@@ -29,4 +29,8 @@ router.put('/account', requireAuthentication, (req, res, next) => {
   superAdminController.updateAccount(req, res, next);
 });
 
+router.post('/impersonate', requireAuthentication, (req, res, next) => {
+  superAdminController.impersonateTree(req, res, next);
+});
+
 export const superAdminRoutes = router;

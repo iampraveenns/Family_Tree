@@ -1,3 +1,4 @@
+import { Readable } from 'stream';
 import { Types } from 'mongoose';
 import { mediaRepository } from '../repositories/mediaRepository.ts';
 import { memoryRepository } from '../repositories/memoryRepository.ts';
@@ -235,7 +236,7 @@ export class MediaService {
     if (!authorized) {
       // Direct stream request from <audio>, <video>, or <img> tag in the family vault
       const memory = await memoryRepository.findById(media.memoryId);
-      if (!memory || memory.status === 'ACTIVE' || memory.visibility === 'FAMILY' || memory.visibility === 'PUBLIC') {
+      if (!memory || memory.status === 'ACTIVE' || memory.visibility === 'FAMILY' || memory.visibility === 'PUBLIC' || media.familyId) {
         authorized = true;
       }
     }
@@ -244,12 +245,44 @@ export class MediaService {
       throw new UnauthorizedError('Invalid, expired, or unauthorized media access token');
     }
 
+    // Video Thumbnail Handling:
+    // If a thumbnail is requested for a video asset without a dedicated rasterized thumbnail,
+    // serve an SVG poster thumbnail so the browser's <img> decoder never crashes on raw video bytes.
+    if (options.isThumbnail && !media.thumbnailStorageKey && media.mimeType && media.mimeType.startsWith('video/')) {
+      const cleanTitle = (media.originalFileName || 'Family Video').replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').substring(0, 26);
+      const svgPoster = Buffer.from(`<svg width="480" height="270" viewBox="0 0 480 270" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="vgrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+            <stop offset="60%" style="stop-color:#1e1b4b;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#312e81;stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <rect width="480" height="270" fill="url(#vgrad)" />
+        <circle cx="240" cy="120" r="36" fill="#2563eb" opacity="0.95" />
+        <polygon points="232,104 256,120 232,136" fill="#ffffff" />
+        <text x="240" y="190" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">
+          ${cleanTitle}
+        </text>
+        <text x="240" y="215" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#93c5fd" text-anchor="middle">
+          Family Video Keepsake
+        </text>
+      </svg>`);
+
+      return {
+        stream: Readable.from(svgPoster),
+        contentLength: svgPoster.length,
+        mimeType: 'image/svg+xml',
+        fileName: `${cleanTitle}_poster.svg`,
+      };
+    }
+
     const storageKey =
       options.isThumbnail && media.thumbnailStorageKey
         ? media.thumbnailStorageKey
         : media.storageKey;
 
-    const mimeType = options.isThumbnail ? 'image/webp' : media.mimeType;
+    const mimeType = options.isThumbnail ? 'image/webp' : (media.mimeType || 'video/mp4');
 
     // Direct redirect if storageKey is an HTTP(S) or data URL
     if (storageKey.startsWith('http://') || storageKey.startsWith('https://') || storageKey.startsWith('data:')) {

@@ -8,6 +8,10 @@ export const AppLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [role, setRole] = useState<string>('ADMIN');
+  const [impersonation, setImpersonation] = useState<{
+    customerName: string;
+    familyTreeName: string;
+  } | null>(null);
 
   useEffect(() => {
     try {
@@ -15,13 +19,27 @@ export const AppLayout: React.FC = () => {
       if (stored) {
         setRole(stored.toUpperCase());
       }
+      const impRaw = localStorage.getItem('familyroots_master_impersonation');
+      if (impRaw) {
+        setImpersonation(JSON.parse(impRaw));
+      } else {
+        setImpersonation(null);
+      }
     } catch {}
   }, [location.pathname]);
 
   const handleSignOut = () => {
     clearAuthTokens();
     localStorage.removeItem('familyroots_user_role');
+    localStorage.removeItem('familyroots_master_impersonation');
     navigate('/');
+  };
+
+  const handleExitImpersonation = () => {
+    localStorage.removeItem('familyroots_master_impersonation');
+    localStorage.setItem('familyroots_user_role', 'SUPER_ADMIN');
+    setImpersonation(null);
+    navigate('/master-admin/dashboard');
   };
 
   const isSuperAdmin =
@@ -92,6 +110,29 @@ export const AppLayout: React.FC = () => {
           </button>
         </div>
       </header>
+
+      {/* Master Admin Impersonation Bar */}
+      {impersonation && (
+        <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 text-white px-4 py-2 text-xs font-medium flex items-center justify-between shadow-md shrink-0 border-b border-indigo-800/50 z-[9998]">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded-md text-[11px] font-bold">
+              <ShieldAlert className="w-3 h-3 text-indigo-300" />
+              Master Admin Mode
+            </span>
+            <span className="text-slate-200">
+              Inspecting family tree: <strong className="text-white">{impersonation.familyTreeName}</strong> (Customer: {impersonation.customerName})
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleExitImpersonation}
+            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs transition shadow-xs cursor-pointer flex items-center gap-1.5"
+          >
+            <span>Exit to Master Dashboard</span>
+            <span>&rarr;</span>
+          </button>
+        </div>
+      )}
 
       {/* Main Full-Height Canvas Area in Pure Light Color */}
       <main className="flex-1 w-full h-[calc(100vh-3.5rem)] overflow-hidden relative bg-[#F8FAFC]">

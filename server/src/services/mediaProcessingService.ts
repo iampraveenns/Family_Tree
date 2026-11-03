@@ -280,9 +280,35 @@ export class MediaProcessingService {
         thumbnailStorageKey = `families/${familyId}/memories/${memoryId}/thumbnails/${uniqueId}.webp`;
         await storageService.saveFile(thumbnailStorageKey, thumbBuffer, 'image/webp');
       } else if (mime.startsWith('video/')) {
-        // Video Processing (FFmpeg if available, otherwise graceful fallback)
-        if (this.checkFFmpegAvailability()) {
-          // Future FFmpeg thumbnail extraction hook
+        // Video poster thumbnail generation via Sharp SVG rasterization
+        try {
+          const titleSafe = sanitizedBase.replace(/_/g, ' ').substring(0, 24);
+          const svgPoster = `<svg width="480" height="270" viewBox="0 0 480 270" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="vbg" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+                <stop offset="60%" style="stop-color:#1e1b4b;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#312e81;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+            <rect width="480" height="270" fill="url(#vbg)" />
+            <circle cx="240" cy="120" r="36" fill="#2563eb" opacity="0.95" />
+            <polygon points="232,104 256,120 232,136" fill="#ffffff" />
+            <text x="240" y="190" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">
+              ${titleSafe}
+            </text>
+            <text x="240" y="215" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#93c5fd" text-anchor="middle">
+              Family Video Keepsake
+            </text>
+          </svg>`;
+          const thumbBuffer = await sharp(Buffer.from(svgPoster))
+            .webp({ quality: 85 })
+            .toBuffer();
+
+          thumbnailStorageKey = `families/${familyId}/memories/${memoryId}/thumbnails/${uniqueId}.webp`;
+          await storageService.saveFile(thumbnailStorageKey, thumbBuffer, 'image/webp');
+        } catch (vidThumbErr) {
+          logger.warn({ vidThumbErr }, 'Video thumbnail generation note');
         }
       } else if (mime.startsWith('audio/')) {
         // Audio processing

@@ -108,7 +108,7 @@ export class MediaController {
       }
 
       res.set({
-        'Content-Type': 'image/webp',
+        'Content-Type': streamRes.mimeType || 'image/webp',
         'Content-Length': String(streamRes.contentLength),
         'Cache-Control': 'public, max-age=86400', // 24h cache for processed thumbs
       });

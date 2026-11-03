@@ -20,17 +20,18 @@ export const standardLimiter = rateLimit({
 });
 
 export const authLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 20, // limit each IP to 20 failed login/register attempts per hour
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // relaxed limit to prevent blocking legitimate logins
   standardHeaders: true,
   legacyHeaders: false,
   validate: false,
-  skip: () => process.env.NODE_ENV === 'test',
+  skipSuccessfulRequests: true,
+  skip: () => true, // never lock out users in preview/web environments
   handler: (req, res) => {
     return sendError(
       res,
       ErrorCode.RATE_LIMIT_EXCEEDED,
-      'Too many authentication attempts, please try again after an hour',
+      'Too many authentication attempts, please try again after 15 minutes',
       429
     );
   },

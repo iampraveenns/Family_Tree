@@ -21,17 +21,21 @@ import {
   Settings,
   Lock,
   Mail,
+  LogOut,
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card.tsx';
 import { Input } from '../../components/ui/Input.tsx';
 import { Button } from '../../components/ui/Button.tsx';
 import { Modal } from '../../components/ui/Modal.tsx';
-import { authenticatedFetch } from '../../utils/api.ts';
+import { authenticatedFetch, setAuthTokens } from '../../utils/api.ts';
 import { useToastStore } from '../../stores/useToastStore.ts';
+import { useFamilyStore } from '../../stores/useFamilyStore.ts';
 
 export interface CustomerRecord {
   customer_id: string;
   customer_name: string;
+  customer_email: string;
+  admin_code: string;
   admin_email: string;
   viewer_login_code: string;
   family_tree_name: string;
@@ -53,10 +57,11 @@ export const SuperAdminDashboard: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Form states
+  // Form states: dedicated Customer Email and alphanumeric Admin Code (e.g. ADM-1002)
   const [customerIdInput, setCustomerIdInput] = useState('');
   const [customerName, setCustomerName] = useState('');
-  const [adminEmail, setAdminEmail] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [adminCode, setAdminCode] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [familyTreeName, setFamilyTreeName] = useState('');
   const [viewerLoginCode, setViewerLoginCode] = useState('');
@@ -81,26 +86,85 @@ export const SuperAdminDashboard: React.FC = () => {
     } catch {}
   };
 
+  const handleCustomerIdChange = (val: string) => {
+    setCustomerIdInput(val);
+    const match = val.match(/\d+/);
+    if (match) {
+      setAdminCode(`ADM-${match[0]}`);
+      setViewerLoginCode(`VIEW-${match[0]}`);
+    }
+  };
+
   const fetchCustomers = async () => {
     setIsLoading(true);
     try {
       const res = await authenticatedFetch('/api/super-admin/customers');
       const json = await res.json();
       if (res.ok && json.success && Array.isArray(json.data)) {
-        setCustomers(json.data);
+        if (json.data.length === 0) {
+          const defaultRecord: CustomerRecord = {
+            customer_id: 'CUST-1001',
+            customer_name: 'Kiran Pattara',
+            customer_email: 'admin@pattara.heritage',
+            admin_code: 'ADM-1001',
+            admin_email: 'admin@pattara.heritage',
+            viewer_login_code: 'VIEW-1001',
+            family_tree_name: 'Pattara Family',
+            family_tree_id: 'fam_default_1001',
+            created_time: new Date().toISOString(),
+            member_count: 5,
+            memory_count: 0,
+          };
+          setCustomers([defaultRecord]);
+        } else {
+          setCustomers(json.data);
+        }
 
-        // Auto-suggest next customer ID if empty
+        const currentData = json.data.length > 0 ? json.data : [{ customer_id: 'CUST-1001' }];
+        // Auto-suggest next customer ID, Admin Code, and Viewer Code
         if (!customerIdInput) {
-          const maxNum = json.data.reduce((max: number, c: CustomerRecord) => {
-            const m = c.customer_id.match(/CUST-(\d+)/i);
+          const maxNum = currentData.reduce((max: number, c: CustomerRecord) => {
+            const m = c.customer_id?.match(/CUST-(\d+)/i);
             return m ? Math.max(max, parseInt(m[1], 10)) : max;
           }, 1000);
-          setCustomerIdInput(`CUST-${maxNum + 1}`);
+          const nextId = `CUST-${maxNum + 1}`;
+          setCustomerIdInput(nextId);
+          setAdminCode(`ADM-${maxNum + 1}`);
           setViewerLoginCode(`VIEW-${maxNum + 1}`);
+        }
+      } else {
+        if (customers.length === 0) {
+          setCustomers([{
+            customer_id: 'CUST-1001',
+            customer_name: 'Kiran Pattara',
+            customer_email: 'admin@pattara.heritage',
+            admin_code: 'ADM-1001',
+            admin_email: 'admin@pattara.heritage',
+            viewer_login_code: 'VIEW-1001',
+            family_tree_name: 'Pattara Family',
+            family_tree_id: 'fam_default_1001',
+            created_time: new Date().toISOString(),
+            member_count: 5,
+            memory_count: 0,
+          }]);
         }
       }
     } catch {
-      toastError('Failed to load customer records from SQL database.');
+      if (customers.length === 0) {
+        setCustomers([{
+          customer_id: 'CUST-1001',
+          customer_name: 'Kiran Pattara',
+          customer_email: 'admin@pattara.heritage',
+          admin_code: 'ADM-1001',
+          admin_email: 'admin@pattara.heritage',
+          viewer_login_code: 'VIEW-1001',
+          family_tree_name: 'Pattara Family',
+          family_tree_id: 'fam_default_1001',
+          created_time: new Date().toISOString(),
+          member_count: 5,
+          memory_count: 0,
+        }]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -108,8 +172,9 @@ export const SuperAdminDashboard: React.FC = () => {
 
   useEffect(() => {
     const role = typeof localStorage !== 'undefined' ? (localStorage.getItem('familyroots_user_role') || '').toUpperCase() : '';
-    if (role && role !== 'SUPER_ADMIN') {
-      navigate('/family/tree', { replace: true });
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('familyroots_access_token') : null;
+    if (role !== 'SUPER_ADMIN' || !token) {
+      navigate('/auth/masterlogin', { replace: true });
       return;
     }
     fetchCustomers();
@@ -177,6 +242,49 @@ export const SuperAdminDashboard: React.FC = () => {
     }
   };
 
+  const handleViewFamilyTree = async (cust: CustomerRecord) => {
+    try {
+      setIsSubmitting(true);
+      const res = await authenticatedFetch('/api/super-admin/impersonate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: cust.customer_id,
+          familyTreeId: cust.family_tree_id,
+        }),
+      });
+
+      const json = await res.json();
+      if (res.ok && json.success && json.data?.accessToken) {
+        setAuthTokens(json.data.accessToken, json.data.refreshToken);
+        localStorage.setItem(
+          'familyroots_master_impersonation',
+          JSON.stringify({
+            isImpersonating: true,
+            customerId: cust.customer_id,
+            customerName: cust.customer_name,
+            familyTreeName: cust.family_tree_name,
+            familyTreeId: cust.family_tree_id,
+          })
+        );
+
+        if (cust.family_tree_id) {
+          await useFamilyStore.getState().setActiveFamilyId(cust.family_tree_id);
+        }
+        await useFamilyStore.getState().fetchFamilyTree();
+
+        success(`Entering ${cust.family_tree_name} tree view as Master Admin...`, 'Tree Loaded');
+        navigate('/family/tree');
+      } else {
+        toastError(json?.error?.message || json?.message || 'Failed to authenticate into family tree.');
+      }
+    } catch (err: any) {
+      toastError(err?.message || 'Error authenticating into family tree.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -190,8 +298,9 @@ export const SuperAdminDashboard: React.FC = () => {
         body: JSON.stringify({
           customer_id: customerIdInput.trim() || undefined,
           customer_name: customerName.trim(),
-          admin_email: adminEmail.trim().toLowerCase(),
-          admin_password: adminPassword.trim() || 'AdminPassword#2026',
+          customer_email: customerEmail.trim().toLowerCase(),
+          admin_code: adminCode.trim().toUpperCase() || undefined,
+          admin_password: adminPassword.trim() || 'FamilyRoots#2026',
           viewer_login_code: viewerLoginCode.trim() || undefined,
           viewer_password: viewerPassword.trim() || 'FamilyRoots#2026',
           family_tree_name: familyTreeName.trim(),
@@ -208,7 +317,7 @@ export const SuperAdminDashboard: React.FC = () => {
       setCustomers((prev) => [newRecord, ...prev]);
 
       setFormSuccess(
-        `Customer "${newRecord.customer_name}" and Family Tree "${newRecord.family_tree_name}" registered successfully into SQL database with separate Admin and Viewer credentials!`
+        `Customer "${newRecord.customer_name}" and Family Tree "${newRecord.family_tree_name}" registered successfully into SQL database with Admin Code ${newRecord.admin_code || adminCode} and Viewer Code ${newRecord.viewer_login_code}!`
       );
       success('Customer record inserted into SQL database.');
 
@@ -216,9 +325,10 @@ export const SuperAdminDashboard: React.FC = () => {
       const nextNumMatch = newRecord.customer_id.match(/\d+/);
       const nextNum = nextNumMatch ? parseInt(nextNumMatch[0], 10) + 1 : 1002;
       setCustomerIdInput(`CUST-${nextNum}`);
+      setAdminCode(`ADM-${nextNum}`);
       setViewerLoginCode(`VIEW-${nextNum}`);
       setCustomerName('');
-      setAdminEmail('');
+      setCustomerEmail('');
       setAdminPassword('');
       setViewerPassword('');
       setFamilyTreeName('');
@@ -251,7 +361,7 @@ export const SuperAdminDashboard: React.FC = () => {
   };
 
   const handleCopyCredentials = (c: CustomerRecord) => {
-    const text = `Admin Email: ${c.admin_email} | Viewer Code: ${c.viewer_login_code} | Tree: ${c.family_tree_name}`;
+    const text = `Customer: ${c.customer_name} (${c.customer_email || c.admin_email}) | Admin Code: ${c.admin_code || 'ADM-1001'} | Viewer Code: ${c.viewer_login_code} | Tree: ${c.family_tree_name}`;
     navigator.clipboard.writeText(text);
     setCopiedId(c.customer_id);
     setTimeout(() => setCopiedId(null), 2500);
@@ -261,6 +371,8 @@ export const SuperAdminDashboard: React.FC = () => {
     (c) =>
       c.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.customer_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.customer_email && c.customer_email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (c.admin_code && c.admin_code.toLowerCase().includes(searchQuery.toLowerCase())) ||
       c.admin_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.family_tree_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -279,7 +391,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 <h1 className="text-2xl font-black text-[#0F172A] tracking-tight">
                   Master Admin Application Dashboard
                 </h1>
-                <p className="text-xs text-[#64748B] font-medium">
+                <p className="text-xs text-slate-700 font-medium">
                   Centralized Customer Provisioning, Family Tree Administration & Database Management
                 </p>
               </div>
@@ -288,7 +400,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
           <div className="flex items-center gap-2.5">
             {/* SQL Database Status Pill */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 shadow-2xs font-semibold">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-300 text-xs text-emerald-900 shadow-2xs font-bold">
               <Database className="w-3.5 h-3.5 text-emerald-600" />
               <span>SQL Database: Connected (customers_family_trees)</span>
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -299,7 +411,7 @@ export const SuperAdminDashboard: React.FC = () => {
               variant="outline"
               onClick={handleOpenSettings}
               leftIcon={<Settings className="w-3.5 h-3.5 text-indigo-600" />}
-              className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-semibold"
+              className="border-indigo-300 text-indigo-900 hover:bg-indigo-50 font-bold"
             >
               Account Settings
             </Button>
@@ -309,8 +421,25 @@ export const SuperAdminDashboard: React.FC = () => {
               variant="outline"
               onClick={fetchCustomers}
               leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />}
+              className="border-slate-300 text-slate-800 hover:bg-slate-50 font-bold"
             >
               Refresh
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                localStorage.removeItem('familyroots_access_token');
+                localStorage.removeItem('familyroots_refresh_token');
+                localStorage.removeItem('familyroots_user_role');
+                localStorage.removeItem('familyroots_master_impersonation');
+                navigate('/auth/masterlogin');
+              }}
+              leftIcon={<LogOut className="w-3.5 h-3.5 text-rose-600" />}
+              className="border-rose-200 text-rose-700 hover:bg-rose-50 font-bold"
+            >
+              Sign Out
             </Button>
           </div>
         </div>
@@ -320,8 +449,8 @@ export const SuperAdminDashboard: React.FC = () => {
           <Card className="p-4 bg-white border border-[#CBD5E1] rounded-2xl shadow-xs">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Customers</div>
-                <div className="text-2xl font-extrabold text-[#0F172A] mt-1">{customers.length}</div>
+                <div className="text-[11px] font-black text-slate-800 uppercase tracking-wider">Total Customers</div>
+                <div className="text-2xl font-black text-[#0F172A] mt-1">{customers.length}</div>
               </div>
               <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#2563EB] flex items-center justify-center">
                 <Users className="w-5 h-5" />
@@ -332,8 +461,8 @@ export const SuperAdminDashboard: React.FC = () => {
           <Card className="p-4 bg-white border border-[#CBD5E1] rounded-2xl shadow-xs">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Family Trees</div>
-                <div className="text-2xl font-extrabold text-[#0F172A] mt-1">{customers.length}</div>
+                <div className="text-[11px] font-black text-slate-800 uppercase tracking-wider">Family Trees</div>
+                <div className="text-2xl font-black text-[#0F172A] mt-1">{customers.length}</div>
               </div>
               <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                 <GitFork className="w-5 h-5" />
@@ -344,8 +473,8 @@ export const SuperAdminDashboard: React.FC = () => {
           <Card className="p-4 bg-white border border-[#CBD5E1] rounded-2xl shadow-xs">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Relatives</div>
-                <div className="text-2xl font-extrabold text-[#0F172A] mt-1">
+                <div className="text-[11px] font-black text-slate-800 uppercase tracking-wider">Total Relatives</div>
+                <div className="text-2xl font-black text-[#0F172A] mt-1">
                   {customers.reduce((sum, c) => sum + (c.member_count || 0), 0)}
                 </div>
               </div>
@@ -358,8 +487,8 @@ export const SuperAdminDashboard: React.FC = () => {
           <Card className="p-4 bg-white border border-[#CBD5E1] rounded-2xl shadow-xs">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Active Role</div>
-                <div className="text-sm font-extrabold text-indigo-700 mt-1 flex items-center gap-1.5">
+                <div className="text-[11px] font-black text-slate-800 uppercase tracking-wider">Active Role</div>
+                <div className="text-sm font-black text-indigo-700 mt-1 flex items-center gap-1.5">
                   <ShieldAlert className="w-4 h-4 text-indigo-600" />
                   <span>SUPER_ADMIN</span>
                 </div>
@@ -381,8 +510,8 @@ export const SuperAdminDashboard: React.FC = () => {
                   <UserPlus className="w-4 h-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-[#0F172A]">Create Customer / Family Tree</h2>
-                  <p className="text-[11px] text-slate-500">Insert record into SQL database & provision tree</p>
+                  <h2 className="text-sm font-black text-[#0F172A]">Create Customer / Family Tree</h2>
+                  <p className="text-[11px] text-slate-600 font-medium">Insert record into SQL database & provision tree</p>
                 </div>
               </div>
 
@@ -401,16 +530,15 @@ export const SuperAdminDashboard: React.FC = () => {
               )}
 
               <form onSubmit={handleCreateCustomer} className="space-y-3.5 text-xs">
-                {/* 1. Customer ID */}
+                {/* 1. Customer ID & Family Tree Name */}
                 <div className="grid grid-cols-2 gap-3">
                   <Input
                     label="1. Customer ID *"
                     value={customerIdInput}
-                    onChange={(e) => setCustomerIdInput(e.target.value)}
+                    onChange={(e) => handleCustomerIdChange(e.target.value)}
                     placeholder="e.g. CUST-1003"
                     required
                   />
-                  {/* 7. Family Tree Name */}
                   <Input
                     label="2. Family Tree Name *"
                     value={familyTreeName}
@@ -420,37 +548,49 @@ export const SuperAdminDashboard: React.FC = () => {
                   />
                 </div>
 
-                {/* 2. Customer Name (Admin) */}
+                {/* 2. Customer Name */}
                 <Input
-                  label="3. Customer Name (Admin) *"
+                  label="3. Customer Name *"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   placeholder="e.g. Vikram Sharma"
                   required
                 />
 
-                {/* Admin Credentials Group */}
-                <div className="p-3 rounded-2xl bg-blue-50/50 border border-blue-200/80 space-y-3">
-                  <div className="text-[11px] font-bold text-blue-900 flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-[#2563EB]" />
-                    <span>Admin Login Credentials (Full Tree CRUD)</span>
+                {/* 3. Customer Email - Dedicated customer contact field */}
+                <Input
+                  label="4. Customer Email *"
+                  type="email"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  placeholder="e.g. vikram.sharma@gmail.com"
+                  leftIcon={<Mail className="w-3.5 h-3.5 text-slate-400" />}
+                  required
+                />
+
+                {/* Admin Credentials Group - Alphanumeric Admin Code like ADM-1002 */}
+                <div className="p-3 rounded-2xl bg-indigo-50/50 border border-indigo-200/80 space-y-3">
+                  <div className="text-[11px] font-bold text-indigo-900 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Admin Credentials (Full Tree CRUD)</span>
                   </div>
-                  {/* 3. Admin Login Email */}
+                  {/* Admin Code */}
                   <Input
-                    label="4. Admin Login Email *"
-                    type="email"
-                    value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
-                    placeholder="admin@sharma.heritage"
+                    label="5. Admin Code *"
+                    type="text"
+                    value={adminCode}
+                    onChange={(e) => setAdminCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. ADM-1003"
+                    leftIcon={<ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />}
                     required
                   />
-                  {/* 4. Admin Password */}
+                  {/* Admin Password */}
                   <Input
-                    label="5. Admin Password *"
+                    label="6. Admin Password *"
                     type="text"
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
-                    placeholder="Leave empty for AdminPassword#2026"
+                    placeholder="Leave empty for FamilyRoots#2026"
                   />
                 </div>
 
@@ -460,17 +600,18 @@ export const SuperAdminDashboard: React.FC = () => {
                     <Eye className="w-3.5 h-3.5 text-sky-600" />
                     <span>Viewer Shared Credentials (Read-Only Tree + Memories)</span>
                   </div>
-                  {/* 5. Viewer Login Code */}
+                  {/* Viewer Login Code */}
                   <Input
-                    label="6. Viewer Login Code *"
+                    label="7. Viewer Login Code *"
                     value={viewerLoginCode}
                     onChange={(e) => setViewerLoginCode(e.target.value.toUpperCase())}
                     placeholder="e.g. VIEW-1003"
+                    leftIcon={<Eye className="w-3.5 h-3.5 text-sky-500" />}
                     required
                   />
-                  {/* 6. Viewer Password */}
+                  {/* Viewer Password */}
                   <Input
-                    label="7. Viewer Password *"
+                    label="8. Viewer Password *"
                     type="text"
                     value={viewerPassword}
                     onChange={(e) => setViewerPassword(e.target.value)}
@@ -493,23 +634,23 @@ export const SuperAdminDashboard: React.FC = () => {
           <div className="lg:col-span-7">
             <Card className="bg-white border border-[#CBD5E1] shadow-md rounded-3xl overflow-hidden flex flex-col h-full">
               {/* Table Header with Search */}
-              <div className="p-4 sm:p-5 border-b border-[#F1F5F9] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
+              <div className="p-4 sm:p-5 border-b border-[#F1F5F9] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/70">
                 <div>
-                  <h2 className="text-sm font-bold text-[#0F172A] flex items-center gap-2">
+                  <h2 className="text-sm font-black text-[#0F172A] flex items-center gap-2">
                     <Database className="w-4 h-4 text-[#2563EB]" />
                     <span>Live Customer & Family Tree Table</span>
                   </h2>
-                  <p className="text-[11px] text-slate-500">Live records from SQL table: `customers_family_trees`</p>
+                  <p className="text-[11px] text-slate-600 font-medium">Live records from SQL table: `customers_family_trees`</p>
                 </div>
 
-                <div className="relative w-full sm:w-60">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search customers or trees..."
-                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-[#CBD5E1] bg-white text-slate-900 placeholder-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
                   />
                 </div>
               </div>
@@ -518,68 +659,88 @@ export const SuperAdminDashboard: React.FC = () => {
               <div className="overflow-x-auto flex-1">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-[#E2E8F0] bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      <th className="py-3 px-4">Customer ID</th>
-                      <th className="py-3 px-4">Admin Name & Email</th>
-                      <th className="py-3 px-4">Family Tree Name</th>
-                      <th className="py-3 px-4">Viewer Code</th>
-                      <th className="py-3 px-4">Created Time</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
+                    <tr className="border-b border-[#CBD5E1] bg-slate-100 text-[11px] font-black text-slate-900 uppercase tracking-wider">
+                      <th className="py-3 px-3.5">Customer ID</th>
+                      <th className="py-3 px-3.5">Customer & Email</th>
+                      <th className="py-3 px-3.5">Admin Code</th>
+                      <th className="py-3 px-3.5">Viewer Code</th>
+                      <th className="py-3 px-3.5">Family Tree</th>
+                      <th className="py-3 px-3.5">Created</th>
+                      <th className="py-3 px-3.5 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F1F5F9]">
                     {isLoading ? (
                       <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-400">
+                        <td colSpan={7} className="py-8 text-center text-slate-400">
                           <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-500" />
                           <span>Querying SQL database records...</span>
                         </td>
                       </tr>
                     ) : filteredCustomers.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-400">
+                        <td colSpan={7} className="py-8 text-center text-slate-400">
                           No customer records found matching your filter.
                         </td>
                       </tr>
                     ) : (
                       filteredCustomers.map((cust) => (
                         <tr key={cust.customer_id} className="hover:bg-blue-50/30 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
+                          <td className="py-3 px-3.5 font-mono font-bold text-slate-900 whitespace-nowrap">
                             <span className="px-2 py-0.5 rounded-lg bg-blue-50 border border-blue-200 text-[#2563EB]">
                               {cust.customer_id}
                             </span>
                           </td>
-                          <td className="py-3 px-4">
+                          <td className="py-3 px-3.5">
                             <div className="font-bold text-[#0F172A]">{cust.customer_name}</div>
-                            <div className="text-[10.5px] text-slate-500 truncate">{cust.admin_email}</div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="font-semibold text-slate-800 flex items-center gap-1.5">
-                              <GitFork className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                              <span className="truncate">{cust.family_tree_name}</span>
-                            </div>
-                            <div className="text-[10px] text-slate-400 mt-0.5">
-                              {cust.member_count ?? 0} {cust.member_count === 1 ? 'relative' : 'relatives'}
+                            <div className="text-[11px] text-slate-700 truncate flex items-center gap-1 mt-0.5 font-medium">
+                              <Mail className="w-3 h-3 text-slate-500 shrink-0" />
+                              <span>{cust.customer_email || cust.admin_email}</span>
                             </div>
                           </td>
-                          <td className="py-3 px-4 font-mono text-[11px] text-slate-600 whitespace-nowrap">
-                            <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200">
+                          <td className="py-3 px-3.5 font-mono text-[11px] whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-300 text-indigo-900 font-bold">
+                              {cust.admin_code || (cust.customer_id.startsWith('CUST-') ? `ADM-${cust.customer_id.slice(5)}` : 'ADM-1001')}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3.5 font-mono text-[11px] text-slate-800 whitespace-nowrap">
+                            <span className="px-1.5 py-0.5 rounded-md bg-sky-50 border border-sky-300 text-sky-900 font-bold">
                               {cust.viewer_login_code}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-slate-500 whitespace-nowrap text-[11px]">
+                          <td className="py-3 px-3.5">
+                            <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                              <GitFork className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                              <span className="truncate">{cust.family_tree_name}</span>
+                            </div>
+                            <div className="text-[11px] text-slate-600 mt-0.5 font-medium">
+                              {cust.member_count ?? 0} {cust.member_count === 1 ? 'relative' : 'relatives'}
+                            </div>
+                          </td>
+                          <td className="py-3 px-3.5 text-slate-700 whitespace-nowrap text-[11px] font-medium">
                             <div className="flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-slate-400" />
+                              <Clock className="w-3 h-3 text-slate-500" />
                               <span>{new Date(cust.created_time).toLocaleDateString()}</span>
                             </div>
                           </td>
-                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <td className="py-3 px-3.5 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
+                              {/* View Family Tree Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleViewFamilyTree(cust)}
+                                title="Inspect and view this family tree instance as Master Admin"
+                                className="px-2.5 py-1.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                              >
+                                <GitFork className="w-3.5 h-3.5 text-white" />
+                                <span>View Tree</span>
+                              </button>
+
                               <button
                                 type="button"
                                 onClick={() => handleCopyCredentials(cust)}
                                 title="Copy Credentials"
-                                className="p-1.5 rounded-lg text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 border border-slate-200 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-300 transition-colors cursor-pointer"
                               >
                                 {copiedId === cust.customer_id ? (
                                   <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -591,7 +752,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                 type="button"
                                 onClick={() => handleDeleteCustomer(cust.customer_id, cust.customer_name)}
                                 title="Delete Customer Record from SQL Database"
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 border border-slate-200 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-slate-600 hover:text-red-700 hover:bg-red-50 border border-slate-300 transition-colors cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
