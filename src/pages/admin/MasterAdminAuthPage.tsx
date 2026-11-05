@@ -64,9 +64,14 @@ export const MasterAdminAuthPage: React.FC = () => {
 
       if (res.ok && json?.success && json?.data?.accessToken) {
         setAuthTokens(json.data.accessToken, json.data.refreshToken);
-        localStorage.setItem('familyroots_user_role', 'SUPER_ADMIN');
+        const userRole = json.data.user?.role || json.data.role || 'SUPER_ADMIN';
+        localStorage.setItem('familyroots_user_role', userRole);
         localStorage.removeItem('familyroots_master_impersonation');
-        navigate('/master-admin/dashboard');
+        if (userRole === 'SUPER_ADMIN') {
+          navigate('/master-admin/dashboard');
+        } else {
+          navigate('/family/tree');
+        }
         return;
       }
 

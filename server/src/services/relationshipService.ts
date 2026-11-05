@@ -20,6 +20,20 @@ export interface CreateRelationshipInput {
   metadata?: Record<string, unknown>;
 }
 
+function calculateAgeYears(dobStr?: string | null, atDateStr?: string | null): number {
+  if (!dobStr) return 0;
+  const rawDob = dobStr.trim();
+  const birth = new Date(rawDob.includes('T') ? rawDob.split('T')[0] : rawDob);
+  const target = atDateStr ? new Date(atDateStr.includes('T') ? atDateStr.split('T')[0] : atDateStr) : new Date();
+  if (isNaN(birth.getTime()) || isNaN(target.getTime())) return 0;
+  let age = target.getFullYear() - birth.getFullYear();
+  const m = target.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && target.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 export class RelationshipService {
   /**
    * Primary graph validation and relationship creation engine.
@@ -66,13 +80,41 @@ export class RelationshipService {
       );
     }
 
-    // 4. Compulsory marriageDate validation for spouse relationships
+    // 4. Compulsory marriageDate validation for spouse relationships & marriage age restriction (> 18)
     if (relationshipType === RelationshipType.SPOUSE) {
       if (input.marriageDate !== undefined && (!input.marriageDate || !input.marriageDate.trim())) {
         throw new ValidationError('Marriage date (DOM) is compulsory when adding a spouse.', {
           code: ErrorCode.VALIDATION_ERROR,
           field: 'marriageDate',
         });
+      }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (input.marriageDate && input.marriageDate.trim()) {
+        const cleanDom = input.marriageDate.trim();
+        if (cleanDom > todayStr) {
+          throw new ValidationError('Marriage date cannot be a future date.');
+        }
+        if (sourceMember.dateOfBirth) {
+          const ageA = calculateAgeYears(sourceMember.dateOfBirth, cleanDom);
+          if (ageA <= 18) {
+            throw new ValidationError(
+              `A person can only get married if their calculated age is greater than 18 years (${
+                sourceMember.displayName || sourceMember.firstName
+              } age: ${ageA < 0 ? 0 : ageA} years).`
+            );
+          }
+        }
+        if (targetMember.dateOfBirth) {
+          const ageB = calculateAgeYears(targetMember.dateOfBirth, cleanDom);
+          if (ageB <= 18) {
+            throw new ValidationError(
+              `A person can only get married if their calculated age is greater than 18 years (${
+                targetMember.displayName || targetMember.firstName
+              } age: ${ageB < 0 ? 0 : ageB} years).`
+            );
+          }
+        }
       }
     }
 
@@ -102,12 +144,8 @@ export class RelationshipService {
             existingSymmetric._id.toString(),
             { marriageDate: existingSymmetric.marriageDate }
           );
-          return existingSymmetric;
         }
-        throw new ConflictError(
-          `A ${relationshipType} relationship already exists between ${sourceMember.displayName || sourceMember.firstName} and ${targetMember.displayName || targetMember.firstName}`,
-          ErrorCode.DUPLICATE_ENTITY
-        );
+        return existingSymmetric;
       }
     } else {
       // Exact directional duplicate check
@@ -119,10 +157,12 @@ export class RelationshipService {
       );
 
       if (existingExact) {
-        throw new ConflictError(
-          `An identical ${relationshipType} relationship already exists between these members`,
-          ErrorCode.DUPLICATE_ENTITY
-        );
+        if (input.siblingOrder !== undefined) {
+          existingExact.siblingOrder = input.siblingOrder;
+          existingExact.displayOrder = input.siblingOrder;
+          await existingExact.save();
+        }
+        return existingExact;
       }
     }
 
@@ -139,6 +179,18 @@ export class RelationshipService {
           `Invalid relationship: Cannot add child: Parent '${sourceMember.displayName || sourceMember.firstName}' must have a registered spouse before adding a child.`,
           { code: ErrorCode.INVALID_RELATIONSHIP, requiresSpouse: true }
         );
+      }
+
+      // Check if spouse is deceased
+      const spousePartnerId =
+        parentSpouse.sourceMemberId.toString() === sourceMemberId
+          ? parentSpouse.targetMemberId.toString()
+          : parentSpouse.sourceMemberId.toString();
+      const spousePartner = await memberRepository.findByFamilyAndId(familyId, spousePartnerId);
+      if (spousePartner && (!spousePartner.isLiving || Boolean(spousePartner.dateOfDeath))) {
+        throw new ValidationError('Cannot add child: spouse is deceased.', {
+          code: ErrorCode.INVALID_RELATIONSHIP,
+        });
       }
 
       // Direct mutual parenting check: Cannot be parent of someone who is already your parent
@@ -182,6 +234,18 @@ export class RelationshipService {
           `Invalid relationship: Cannot add child: Parent '${targetMember.displayName || targetMember.firstName}' must have a registered spouse before adding a child.`,
           { code: ErrorCode.INVALID_RELATIONSHIP, requiresSpouse: true }
         );
+      }
+
+      // Check if spouse is deceased
+      const spousePartnerId =
+        parentSpouse.sourceMemberId.toString() === targetMemberId
+          ? parentSpouse.targetMemberId.toString()
+          : parentSpouse.sourceMemberId.toString();
+      const spousePartner = await memberRepository.findByFamilyAndId(familyId, spousePartnerId);
+      if (spousePartner && (!spousePartner.isLiving || Boolean(spousePartner.dateOfDeath))) {
+        throw new ValidationError('Cannot add child: spouse is deceased.', {
+          code: ErrorCode.INVALID_RELATIONSHIP,
+        });
       }
 
       const mutualParent = await relationshipRepository.findExact(
@@ -483,7 +547,36 @@ export class RelationshipService {
 
     const updateData: Partial<IRelationship> = {};
     if (input.marriageDate !== undefined) {
-      updateData.marriageDate = input.marriageDate ? input.marriageDate.trim() : null;
+      const cleanDom = input.marriageDate ? input.marriageDate.trim() : null;
+      if (cleanDom) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (cleanDom > todayStr) {
+          throw new ValidationError('Marriage date cannot be a future date.');
+        }
+        const memberA = await memberRepository.findById(existing.sourceMemberId.toString());
+        const memberB = await memberRepository.findById(existing.targetMemberId.toString());
+        if (memberA?.dateOfBirth) {
+          const ageA = calculateAgeYears(memberA.dateOfBirth, cleanDom);
+          if (ageA <= 18) {
+            throw new ValidationError(
+              `A person can only get married if their calculated age is greater than 18 years (${
+                memberA.displayName || memberA.firstName
+              } age: ${ageA < 0 ? 0 : ageA} years).`
+            );
+          }
+        }
+        if (memberB?.dateOfBirth) {
+          const ageB = calculateAgeYears(memberB.dateOfBirth, cleanDom);
+          if (ageB <= 18) {
+            throw new ValidationError(
+              `A person can only get married if their calculated age is greater than 18 years (${
+                memberB.displayName || memberB.firstName
+              } age: ${ageB < 0 ? 0 : ageB} years).`
+            );
+          }
+        }
+      }
+      updateData.marriageDate = cleanDom;
     }
     if (input.status !== undefined) {
       updateData.status = input.status;

@@ -5,11 +5,12 @@ import { Modal } from '../ui/Modal.tsx';
 import { Input } from '../ui/Input.tsx';
 import { MemberAvatar } from '../ui/MemberAvatar.tsx';
 import { FamilyMember, FamilyBranch } from '../../types/index.ts';
+import { ALL_NODE_COLOR_PALETTES } from '../../constants/nodeColors.ts';
 
 export interface MemberFormData {
   firstName: string;
   lastName: string;
-  gender: 'MALE' | 'FEMALE' | 'OTHER' | 'UNKNOWN';
+  gender: 'MALE' | 'FEMALE' | 'OTHER';
   relationshipType: string;
   marriageDate?: string;
   birthDate?: string;
@@ -26,7 +27,7 @@ export interface MemberFormData {
   maidenName: string;
   branchId: string;
   biography: string;
-  notes: string;
+  nodeColor?: string;
 }
 
 export interface AddMemberModalProps {
@@ -36,6 +37,7 @@ export interface AddMemberModalProps {
   isRootAncestor: boolean;
   referenceMember?: FamilyMember | null;
   referenceMemberHasSpouse?: boolean;
+  isReferenceMemberSpouseDeceased?: boolean;
   initialRelationshipType?: string;
   branches?: FamilyBranch[];
   isSubmitting?: boolean;
@@ -47,6 +49,20 @@ export interface AddMemberModalProps {
   onRestoreFullscreen?: () => void;
 }
 
+export function calculateAgeYears(dobStr?: string | null, atDateStr?: string | null): number {
+  if (!dobStr) return 0;
+  const rawDob = dobStr.trim();
+  const birth = new Date(rawDob.includes('T') ? rawDob.split('T')[0] : rawDob);
+  const target = atDateStr ? new Date(atDateStr.includes('T') ? atDateStr.split('T')[0] : atDateStr) : new Date();
+  if (isNaN(birth.getTime()) || isNaN(target.getTime())) return 0;
+  let age = target.getFullYear() - birth.getFullYear();
+  const m = target.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && target.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 export const AddMemberModal: React.FC<AddMemberModalProps> = ({
   isOpen,
   onClose,
@@ -54,6 +70,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
   isRootAncestor,
   referenceMember,
   referenceMemberHasSpouse,
+  isReferenceMemberSpouseDeceased = false,
   initialRelationshipType = 'CHILD',
   branches = [],
   isSubmitting = false,
@@ -93,9 +110,10 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
   // Stable isolated local form state
   const [firstName, setFirstName] = useState(() => editMember?.firstName || '');
   const [lastName, setLastName] = useState(() => editMember?.lastName || '');
-  const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER' | 'UNKNOWN'>(
-    () => editMember?.gender || 'MALE'
-  );
+  const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER'>(() => {
+    const raw = (editMember?.gender || '').toUpperCase();
+    return raw === 'FEMALE' ? 'FEMALE' : raw === 'OTHER' ? 'OTHER' : 'MALE';
+  });
   const [relationshipType, setRelationshipType] = useState(initialRelationshipType);
   const [marriageDate, setMarriageDate] = useState(getInitialDom);
   const [dateOfBirth, setDateOfBirth] = useState(getInitialDob);
@@ -115,9 +133,9 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
   const [maidenName, setMaidenName] = useState('');
   const [branchId, setBranchId] = useState(() => editMember?.branchId || '');
   const [biography, setBiography] = useState(() => editMember?.biography || '');
-  const [notes, setNotes] = useState(() => (editMember as any)?.notes || '');
+  const [nodeColor, setNodeColor] = useState<string>(() => editMember?.nodeColor || 'yellow');
   const [showMoreDetails, setShowMoreDetails] = useState(
-    () => Boolean(editMember?.biography || (editMember as any)?.notes)
+    () => Boolean(editMember?.biography)
   );
   const [formError, setFormError] = useState<string | null>(null);
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
@@ -200,7 +218,8 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
       if (editMember) {
         setFirstName(editMember.firstName || '');
         setLastName(editMember.lastName || '');
-        setGender(editMember.gender || 'UNKNOWN');
+        const rawGender = (editMember.gender || '').toUpperCase();
+        setGender(rawGender === 'FEMALE' ? 'FEMALE' : rawGender === 'OTHER' ? 'OTHER' : 'MALE');
         const rawDom = (
           existingMarriageDate ||
           (editMember as any).dateOfMarriage ||
@@ -235,8 +254,8 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         setPhotoUrl(editMember.profilePhoto || (editMember as any).profileImageUrl || '');
         setBranchId(editMember.branchId || '');
         setBiography(editMember.biography || '');
-        setNotes((editMember as any).notes || '');
-        if (editMember.biography || (editMember as any).notes || editMember.branchId) {
+        setNodeColor(editMember.nodeColor || 'yellow');
+        if (editMember.biography || editMember.branchId) {
           setShowMoreDetails(true);
         }
       } else {
@@ -245,17 +264,17 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         setLastName('');
         setMarriageDate('');
 
-        // Opposite gender inheritance (Phase 30):
+        // Opposite gender inheritance:
         // Male person → default spouse gender Female
         // Female person → default spouse gender Male
-        // Unknown/unspecified → default neutral / unknown
+        // Other → default spouse gender Other
         if (initialRelationshipType === 'SPOUSE' && referenceMember) {
           if (referenceMember.gender === 'MALE') {
             setGender('FEMALE');
           } else if (referenceMember.gender === 'FEMALE') {
             setGender('MALE');
           } else {
-            setGender('UNKNOWN');
+            setGender('OTHER');
           }
         } else {
           setGender('MALE');
@@ -272,7 +291,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         setMaidenName('');
         setBranchId('');
         setBiography('');
-        setNotes('');
+        setNodeColor('yellow');
         setShowMoreDetails(false);
       }
     }
@@ -288,20 +307,37 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
     e.preventDefault();
     if (isSubmitting) return;
 
-    if (!firstName.trim() || !lastName.trim() || !dateOfBirth.trim()) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const cleanDob = dateOfBirth.trim();
+    const cleanDom = marriageDate.trim();
+    const cleanDod = deathDate.trim();
+
+    if (!firstName.trim() || !lastName.trim() || !cleanDob) {
       setFormError('First Name, Last Name, and Date of Birth are mandatory.');
       return;
     }
 
+    // 1. Date of Birth must be past or current date
+    if (cleanDob > todayStr) {
+      setFormError('Date of Birth cannot be a future date.');
+      return;
+    }
+
+    // 2. Spouse deceased state -> block child additions
     if (
       (relationshipType === 'CHILD' ||
         relationshipType === 'ADOPTED_CHILD' ||
         relationshipType === 'STEP_CHILD') &&
-      referenceMember &&
-      referenceMemberHasSpouse === false
+      referenceMember
     ) {
-      setFormError(`Add a spouse to ${referenceMember.firstName} before adding a child.`);
-      return;
+      if (referenceMemberHasSpouse === false) {
+        setFormError(`Add a spouse to ${referenceMember.firstName} before adding a child.`);
+        return;
+      }
+      if (isReferenceMemberSpouseDeceased) {
+        setFormError(`Cannot add child: spouse of ${referenceMember.firstName} is deceased.`);
+        return;
+      }
     }
 
     if (!editMember && relationshipType === 'SPOUSE' && referenceMember && referenceMemberHasSpouse) {
@@ -309,19 +345,85 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
       return;
     }
 
-    if (relationshipType === 'SPOUSE' && !marriageDate.trim()) {
+    // 3. Marriage Date validation & age restriction (> 18 years)
+    const isSpouseAdd = relationshipType === 'SPOUSE';
+    const isMarriedEdit = Boolean(editMember && hasSpouse);
+
+    if (isSpouseAdd && !cleanDom) {
       setFormError('Marriage date (DOM) is compulsory when adding a spouse.');
       return;
     }
 
-    if (editMember && hasSpouse && !marriageDate.trim()) {
+    if (isMarriedEdit && !cleanDom) {
       setFormError('Marriage date (DOM) is compulsory for a married member.');
       return;
     }
 
-    const hasDeathDate = Boolean(deathDate && deathDate.trim());
+    // Marriage date validation must ONLY run for spouse additions or married member edits
+    if (isSpouseAdd || isMarriedEdit) {
+      if (cleanDom) {
+        if (cleanDom > todayStr) {
+          setFormError('Marriage Date cannot be a future date.');
+          return;
+        }
+        if (cleanDom < cleanDob) {
+          setFormError('Marriage Date cannot be earlier than Date of Birth.');
+          return;
+        }
+
+        // Calculated age of member at marriage
+        const memberMarriageAge = calculateAgeYears(cleanDob, cleanDom);
+        if (memberMarriageAge <= 18) {
+          setFormError(
+            `A person can only get married if their calculated age is greater than 18 years (current age at marriage: ${
+              memberMarriageAge < 0 ? 0 : memberMarriageAge
+            } years).`
+          );
+          return;
+        }
+
+        // If adding a spouse to a reference member, check reference member's age at marriage too
+        if (isSpouseAdd && referenceMember?.dateOfBirth) {
+          const refMarriageAge = calculateAgeYears(referenceMember.dateOfBirth, cleanDom);
+          if (refMarriageAge <= 18) {
+            setFormError(
+              `${referenceMember.firstName} can only get married if their calculated age is greater than 18 years (age at marriage: ${
+                refMarriageAge < 0 ? 0 : refMarriageAge
+              } years).`
+            );
+            return;
+          }
+        }
+      } else if (isSpouseAdd) {
+        // If no marriage date is given, check current age
+        const currentAge = calculateAgeYears(cleanDob, todayStr);
+        if (currentAge <= 18) {
+          setFormError('A person can only get married if their calculated age is greater than 18 years.');
+          return;
+        }
+      }
+    }
+
+    // 4. Deceased Status & DOD validation
+    if (!isLiving && !cleanDod) {
+      setFormError('Date of Death (DOD) is mandatory for a deceased person.');
+      return;
+    }
+
+    if (cleanDod) {
+      if (cleanDod > todayStr) {
+        setFormError('Date of Death cannot be a future date.');
+        return;
+      }
+      if (cleanDod < cleanDob) {
+        setFormError('Date of Death cannot be earlier than Date of Birth.');
+        return;
+      }
+    }
+
+    const hasDeathDate = Boolean(cleanDod);
     const effectiveLiving = hasDeathDate ? false : isLiving;
-    const effectiveDeathDate = effectiveLiving ? '' : deathDate.trim();
+    const effectiveDeathDate = effectiveLiving ? '' : cleanDod;
 
     setFormError(null);
     try {
@@ -331,7 +433,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         lastName: lastName.trim(),
         gender,
         relationshipType,
-        marriageDate: editMember ? marriageDate.trim() : (marriageDate.trim() || undefined),
+        marriageDate: (isSpouseAdd || isMarriedEdit) && cleanDom ? cleanDom : undefined,
         birthDate: dateOfBirth.trim(),
         birthYear: dateOfBirth.trim() ? dateOfBirth.trim().slice(0, 4) : '',
         exactBirthDate: dateOfBirth.trim(),
@@ -345,7 +447,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         maidenName: maidenName.trim(),
         branchId: branchId.trim(),
         biography: biography.trim(),
-        notes: notes.trim(),
+        nodeColor: nodeColor || 'yellow',
       };
 
       if (editMember && onEditSubmit) {
@@ -367,7 +469,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         setMaidenName('');
         setBranchId('');
         setBiography('');
-        setNotes('');
+        setNodeColor('yellow');
         setShowMoreDetails(false);
       }
     } catch (err: any) {
@@ -397,8 +499,8 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
           : 'Graph-validated kinship link in your family chronicle'
       }
       id="add-member-modal"
-      className={editMember ? '!bg-[#FFF9D6] !border-[#B8D4FF] text-[#17233C]' : ''}
-      style={editMember ? { backgroundColor: '#FFF9D6', color: '#17233C' } : undefined}
+      className={editMember ? '!bg-[#FFF8D6] !border-[#F5E7A3] text-[#263449]' : ''}
+      style={editMember ? { backgroundColor: '#FFF8D6', color: '#263449' } : undefined}
     >
       <form onSubmit={handleSubmit} className="space-y-4" noValidate={false}>
         {/* Form Error Banner if submission fails */}
@@ -429,10 +531,12 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               onDragLeave={() => setIsDraggingPhoto(false)}
               onDrop={handlePhotoDrop}
               className={`p-4 rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center text-center ${
-                editMember ? 'bg-[#FFF9D6]' : 'bg-white'
+                editMember ? 'bg-[#FFF8D6]' : 'bg-white'
               } ${
                 isDraggingPhoto
                   ? 'border-[#2563EB] bg-[#EFF6FF]'
+                  : editMember
+                  ? 'border-[#F5E7A3] hover:border-[#D4B83E]'
                   : 'border-[#B8D4FF] hover:border-[#7EA7D9]'
               }`}
             >
@@ -521,14 +625,14 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
             {/* 2. First Name + Last Name (Same Row, Two Equal Columns) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <Input
-                label="First Name"
+                label="First Name *"
                 placeholder="First Name"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 required
               />
               <Input
-                label="Last Name"
+                label="Last Name *"
                 placeholder="Last Name"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
@@ -543,7 +647,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                   htmlFor="member-gender"
                   className="text-xs font-semibold text-[#334155] mb-1.5 block"
                 >
-                  Gender
+                  Gender <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <select
@@ -555,7 +659,6 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                     <option value="MALE">Male</option>
                     <option value="FEMALE">Female</option>
                     <option value="OTHER">Other</option>
-                    <option value="UNKNOWN">Unknown</option>
                   </select>
                   <ChevronDown className="w-4 h-4 text-[#64748B] pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
                 </div>
@@ -565,29 +668,33 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                 <Input
                   type="text"
                   placeholder="e.g. Architectural Photographer"
-                  label="Occupation (Optional)"
+                  label="Occupation"
                   value={occupation}
                   onChange={(e) => setOccupation(e.target.value)}
                 />
               </div>
             </div>
 
-            {/* 4. Date of Birth + Marriage Date (DOM) (Same Row, Two Equal Columns) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* 4. Date of Birth + Marriage Date (DOM) (DOM shown only if editing married member) */}
+            <div className={hasSpouse ? 'grid grid-cols-1 sm:grid-cols-2 gap-2.5' : 'grid grid-cols-1 gap-2.5'}>
               <Input
                 type="date"
                 label="Date of Birth *"
                 required
+                max={new Date().toISOString().split('T')[0]}
                 value={dateOfBirth}
                 onChange={(e) => setDateOfBirth(e.target.value)}
               />
-              <Input
-                type="date"
-                label={hasSpouse ? 'Marriage Date (DOM) *' : 'Marriage Date (DOM)'}
-                required={hasSpouse}
-                value={marriageDate}
-                onChange={(e) => setMarriageDate(e.target.value)}
-              />
+              {hasSpouse && (
+                <Input
+                  type="date"
+                  label="Marriage Date (DOM) *"
+                  required
+                  max={new Date().toISOString().split('T')[0]}
+                  value={marriageDate}
+                  onChange={(e) => setMarriageDate(e.target.value)}
+                />
+              )}
             </div>
 
             {/* 5. Housename & Location (Two Columns) */}
@@ -595,14 +702,14 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               <Input
                 type="text"
                 placeholder="e.g. Vadakke Tharavadu"
-                label="Housename (Optional)"
+                label="Housename"
                 value={houseName}
                 onChange={(e) => setHouseName(e.target.value)}
               />
               <Input
                 type="text"
                 placeholder="e.g. Palakkad, Kerala"
-                label="Location (Optional)"
+                label="Location"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
               />
@@ -613,13 +720,13 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               <Input
                 type="text"
                 placeholder="e.g. Bengaluru, Karnataka"
-                label="Birthplace (Optional)"
+                label="Birthplace"
                 value={birthPlace}
                 onChange={(e) => setBirthPlace(e.target.value)}
               />
             </div>
 
-            {/* 6. Collapsible Additional Details (Bio & Notes Only) */}
+            {/* 6. Collapsible Additional Details (Biography) */}
             <div className="pt-2 border-t border-[#E2E8F0]">
               <button
                 type="button"
@@ -629,7 +736,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                 <span>
                   {showMoreDetails
                     ? 'Hide Additional Details'
-                    : 'Additional Details (Biography, Notes)'}
+                    : 'Additional Details (Biography)'}
                 </span>
                 {showMoreDetails ? (
                   <ChevronUp className="w-3.5 h-3.5" />
@@ -659,17 +766,43 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                       />
                     </div>
 
+                    {/* Node Color Theme Selection */}
                     <div>
                       <label className="text-xs font-semibold text-[#334155] mb-1.5 block">
-                        Notes
+                        Node Color Theme (Pastel)
                       </label>
-                      <textarea
-                        rows={2}
-                        placeholder="Private family notes, anecdotes, or records..."
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        className="w-full rounded-xl border border-[#CBD5E1] bg-white px-3.5 py-2 text-xs sm:text-sm text-[#0F172A] focus:ring-2 focus:ring-[#BFDBFE] focus:border-[#2563EB] focus:outline-hidden resize-none transition-all placeholder-[#94A3B8]"
-                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        {ALL_NODE_COLOR_PALETTES.map((palette) => (
+                          <button
+                            key={palette.id}
+                            type="button"
+                            onClick={() => setNodeColor(palette.id)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                              nodeColor === palette.id
+                                ? 'ring-2 ring-[#2563EB] ring-offset-1 shadow-xs font-semibold'
+                                : 'hover:scale-102 hover:shadow-2xs opacity-90'
+                            }`}
+                            style={{
+                              backgroundColor: palette.background,
+                              borderColor: palette.border,
+                              color: palette.text,
+                            }}
+                            title={palette.name}
+                          >
+                            <span
+                              className="w-3 h-3 rounded-full border shrink-0"
+                              style={{
+                                backgroundColor: palette.accent,
+                                borderColor: palette.border,
+                              }}
+                            />
+                            <span>{palette.name}</span>
+                            {nodeColor === palette.id && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-[#2563EB] ml-0.5" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -720,28 +853,57 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                     <option value="SPOUSE">Spouse</option>
                     <option
                       value="CHILD"
-                      disabled={Boolean(referenceMember && referenceMemberHasSpouse === false)}
+                      disabled={Boolean(
+                        referenceMember &&
+                          (referenceMemberHasSpouse === false || isReferenceMemberSpouseDeceased)
+                      )}
                     >
-                      Child {referenceMember && referenceMemberHasSpouse === false ? '(Requires Spouse)' : ''}
+                      Child{' '}
+                      {referenceMember && referenceMemberHasSpouse === false
+                        ? '(Requires Spouse)'
+                        : isReferenceMemberSpouseDeceased
+                        ? '(Spouse Deceased)'
+                        : ''}
                     </option>
                     <option value="PARENT">Parent</option>
                     <option value="SIBLING">Sibling</option>
                     <option
                       value="ADOPTED_CHILD"
-                      disabled={Boolean(referenceMember && referenceMemberHasSpouse === false)}
+                      disabled={Boolean(
+                        referenceMember &&
+                          (referenceMemberHasSpouse === false || isReferenceMemberSpouseDeceased)
+                      )}
                     >
-                      Adopted Child {referenceMember && referenceMemberHasSpouse === false ? '(Requires Spouse)' : ''}
+                      Adopted Child{' '}
+                      {referenceMember && referenceMemberHasSpouse === false
+                        ? '(Requires Spouse)'
+                        : isReferenceMemberSpouseDeceased
+                        ? '(Spouse Deceased)'
+                        : ''}
                     </option>
                     <option
                       value="STEP_CHILD"
-                      disabled={Boolean(referenceMember && referenceMemberHasSpouse === false)}
+                      disabled={Boolean(
+                        referenceMember &&
+                          (referenceMemberHasSpouse === false || isReferenceMemberSpouseDeceased)
+                      )}
                     >
-                      Step-Child {referenceMember && referenceMemberHasSpouse === false ? '(Requires Spouse)' : ''}
+                      Step-Child{' '}
+                      {referenceMember && referenceMemberHasSpouse === false
+                        ? '(Requires Spouse)'
+                        : isReferenceMemberSpouseDeceased
+                        ? '(Spouse Deceased)'
+                        : ''}
                     </option>
                   </select>
                   {referenceMember && referenceMemberHasSpouse === false && (
                     <p className="text-[10px] text-amber-600 mt-1 font-medium leading-tight">
                       Add a spouse to {referenceMember.firstName} before adding children.
+                    </p>
+                  )}
+                  {referenceMember && isReferenceMemberSpouseDeceased && (
+                    <p className="text-[10px] text-amber-700 mt-1 font-medium leading-tight">
+                      Cannot add child: spouse of {referenceMember.firstName} is deceased.
                     </p>
                   )}
                 </div>
@@ -832,7 +994,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
             {/* First Name + Last Name */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <Input
-                label="First Name"
+                label="First Name *"
                 placeholder="First Name"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
@@ -840,7 +1002,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                 autoFocus
               />
               <Input
-                label="Last Name"
+                label="Last Name *"
                 placeholder="Last Name"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
@@ -894,7 +1056,9 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                 <div className="space-y-1">
                   <Input
                     type="date"
-                    label="Date of Death (Compulsory for deceased relative)"
+                    required
+                    max={new Date().toISOString().split('T')[0]}
+                    label="Date of Death *"
                     value={deathDate}
                     onChange={(e) => setDeathDate(e.target.value)}
                   />
@@ -909,7 +1073,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                   htmlFor="new-member-gender"
                   className="text-xs font-semibold text-[#334155] mb-1.5 block"
                 >
-                  Gender
+                  Gender <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <select
@@ -921,7 +1085,6 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                     <option value="MALE">Male</option>
                     <option value="FEMALE">Female</option>
                     <option value="OTHER">Other</option>
-                    <option value="UNKNOWN">Unknown</option>
                   </select>
                   <ChevronDown className="w-4 h-4 text-[#64748B] pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
                 </div>
@@ -931,34 +1094,29 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                 <Input
                   type="text"
                   placeholder="e.g. Architect"
-                  label="Occupation (Optional)"
+                  label="Occupation"
                   value={occupation}
                   onChange={(e) => setOccupation(e.target.value)}
                 />
               </div>
             </div>
 
-            {/* DOB & Marriage Date */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* DOB & Marriage Date (DOM conditionally displayed only when adding Spouse) */}
+            <div className={relationshipType === 'SPOUSE' ? 'grid grid-cols-1 sm:grid-cols-2 gap-2.5' : 'grid grid-cols-1 gap-2.5'}>
               <Input
                 type="date"
                 label="Date of Birth *"
                 required
+                max={new Date().toISOString().split('T')[0]}
                 value={dateOfBirth}
                 onChange={(e) => setDateOfBirth(e.target.value)}
               />
-              {relationshipType === 'SPOUSE' ? (
+              {relationshipType === 'SPOUSE' && (
                 <Input
                   type="date"
                   label="Marriage Date (DOM) *"
                   required
-                  value={marriageDate}
-                  onChange={(e) => setMarriageDate(e.target.value)}
-                />
-              ) : (
-                <Input
-                  type="date"
-                  label="Marriage Date (DOM)"
+                  max={new Date().toISOString().split('T')[0]}
                   value={marriageDate}
                   onChange={(e) => setMarriageDate(e.target.value)}
                 />
@@ -970,14 +1128,14 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               <Input
                 type="text"
                 placeholder="e.g. Vadakke Tharavadu"
-                label="Housename (Optional)"
+                label="Housename"
                 value={houseName}
                 onChange={(e) => setHouseName(e.target.value)}
               />
               <Input
                 type="text"
                 placeholder="e.g. Palakkad, Kerala"
-                label="Location (Optional)"
+                label="Location"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
               />
@@ -988,7 +1146,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               <Input
                 type="text"
                 placeholder="e.g. Chicago, IL"
-                label="Birthplace (Optional)"
+                label="Birthplace"
                 value={birthPlace}
                 onChange={(e) => setBirthPlace(e.target.value)}
               />
@@ -1004,7 +1162,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                 <span>
                   {showMoreDetails
                     ? 'Hide Additional Details'
-                    : 'More Details (Biography, Notes)'}
+                    : 'More Details (Biography)'}
                 </span>
                 {showMoreDetails ? (
                   <ChevronUp className="w-3.5 h-3.5" />
@@ -1034,17 +1192,43 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                       />
                     </div>
 
+                    {/* Node Color Theme Selection */}
                     <div>
-                      <label className="text-xs font-semibold text-[#334155] mb-1 block">
-                        Notes
+                      <label className="text-xs font-semibold text-[#334155] mb-1.5 block">
+                        Node Color Theme (Pastel)
                       </label>
-                      <textarea
-                        rows={2}
-                        placeholder="Private family notes, anecdotes, or records..."
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        className="w-full rounded-xl border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0F172A] focus:ring-2 focus:ring-[#2563EB] focus:outline-hidden resize-none"
-                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        {ALL_NODE_COLOR_PALETTES.map((palette) => (
+                          <button
+                            key={palette.id}
+                            type="button"
+                            onClick={() => setNodeColor(palette.id)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                              nodeColor === palette.id
+                                ? 'ring-2 ring-[#2563EB] ring-offset-1 shadow-xs font-semibold'
+                                : 'hover:scale-102 hover:shadow-2xs opacity-90'
+                            }`}
+                            style={{
+                              backgroundColor: palette.background,
+                              borderColor: palette.border,
+                              color: palette.text,
+                            }}
+                            title={palette.name}
+                          >
+                            <span
+                              className="w-3 h-3 rounded-full border shrink-0"
+                              style={{
+                                backgroundColor: palette.accent,
+                                borderColor: palette.border,
+                              }}
+                            />
+                            <span>{palette.name}</span>
+                            {nodeColor === palette.id && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-[#2563EB] ml-0.5" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </motion.div>
                 )}

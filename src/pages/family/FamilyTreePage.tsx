@@ -50,12 +50,12 @@ import { Input } from '../../components/ui/Input.tsx';
 import { EmptyState } from '../../components/ui/EmptyState.tsx';
 import { authenticatedFetch, setRoleSession, SELECTED_ROLE_KEY } from '../../utils/api.ts';
 
-import { HeritageMemberNode, getNodeDateRows, formatSingleDate } from '../../components/genealogy/HeritageMemberNode.tsx';
+import { HeritageMemberNode, getNodeDateRows, formatSingleDate, calculateMemberAgeYears } from '../../components/genealogy/HeritageMemberNode.tsx';
 import { CoupleJunctionNode, formatMarriageDate } from '../../components/genealogy/CoupleJunctionNode.tsx';
 import { GenerationMarkerNode } from '../../components/genealogy/GenerationMarkerNode.tsx';
 import { StarterMemberNode } from '../../components/genealogy/StarterMemberNode.tsx';
 import { TreeFloatingControls } from '../../components/genealogy/TreeFloatingControls.tsx';
-import { AddMemberModal, MemberFormData } from '../../components/genealogy/AddMemberModal.tsx';
+import { AddMemberModal, MemberFormData, calculateAgeYears } from '../../components/genealogy/AddMemberModal.tsx';
 import { EditLifeStatusModal } from '../../components/genealogy/EditLifeStatusModal.tsx';
 import { CreateFamilyModal } from '../../components/genealogy/CreateFamilyModal.tsx';
 import { ProfilePhotoLightboxModal } from '../../components/genealogy/ProfilePhotoLightboxModal.tsx';
@@ -159,6 +159,12 @@ const FamilyTreeInner: React.FC = () => {
     return role === 'ADMIN' || role === 'SUPER_ADMIN' || userPermissions.capabilities?.canEditAllMembers === true;
   }, [userPermissions]);
 
+  // Master Admin (Super Admin) specific authority flag
+  const isSuperAdmin = useMemo(() => {
+    const userRole = typeof localStorage !== 'undefined' ? (localStorage.getItem('familyroots_user_role') || '').toUpperCase() : '';
+    return userRole === 'SUPER_ADMIN';
+  }, []);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const branchScrollRef = useRef<HTMLDivElement>(null);
   const hasInitialFitted = useRef(false);
@@ -188,10 +194,38 @@ const FamilyTreeInner: React.FC = () => {
 
   const handleSaveSpouseMarriageDate = async (relationshipId: string, newDate: string) => {
     try {
-      if (!newDate || !newDate.trim()) {
+      const cleanDate = newDate.trim();
+      if (!cleanDate) {
         toastError('Marriage date (DOM) is compulsory for a spouse.');
         return;
       }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (cleanDate > todayStr) {
+        toastError('Marriage Date cannot be a future date.');
+        return;
+      }
+
+      const targetRel = relationships.find((r) => r.id === relationshipId);
+      if (targetRel) {
+        const memberA = members.find((m) => m.id === targetRel.sourceMemberId);
+        const memberB = members.find((m) => m.id === targetRel.targetMemberId);
+        if (memberA?.dateOfBirth) {
+          const ageA = calculateAgeYears(memberA.dateOfBirth, cleanDate);
+          if (ageA <= 18) {
+            toastError(`${memberA.firstName} can only get married if their calculated age is greater than 18 years.`);
+            return;
+          }
+        }
+        if (memberB?.dateOfBirth) {
+          const ageB = calculateAgeYears(memberB.dateOfBirth, cleanDate);
+          if (ageB <= 18) {
+            toastError(`${memberB.firstName} can only get married if their calculated age is greater than 18 years.`);
+            return;
+          }
+        }
+      }
+
       setIsUpdatingSpouseRel(true);
       const famId = currentFamily?.id || activeFamilyId;
       if (!famId) throw new Error('No active family vault selected');
@@ -200,7 +234,7 @@ const FamilyTreeInner: React.FC = () => {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          marriageDate: newDate && newDate.trim().length > 0 ? newDate.trim() : null,
+          marriageDate: cleanDate,
         }),
       });
 
@@ -326,6 +360,7 @@ const FamilyTreeInner: React.FC = () => {
           location: data.location !== undefined ? data.location.trim() : undefined,
           profilePhoto: data.photoUrl || undefined,
           biography: data.biography || undefined,
+          nodeColor: data.nodeColor || undefined,
           branchIds: (() => {
             if (!data.branchId) return [];
             const matchingBranch = branches.find(
@@ -521,19 +556,53 @@ const FamilyTreeInner: React.FC = () => {
     [relationships]
   );
 
+  // Business rule: Check if a member's spouse is deceased
+  const isMemberSpouseDeceased = useCallback(
+    (memberId: string) => {
+      const spouseRel = relationships.find(
+        (r) =>
+          r.relationshipType === 'SPOUSE' &&
+          r.status !== 'HISTORICAL' &&
+          (r.sourceMemberId === memberId || r.targetMemberId === memberId)
+      );
+      if (!spouseRel) return false;
+      const spouseId = spouseRel.sourceMemberId === memberId ? spouseRel.targetMemberId : spouseRel.sourceMemberId;
+      const spouseMember = members.find((m) => m.id === spouseId || (m as any)._id?.toString() === spouseId);
+      return spouseMember ? (!spouseMember.isLiving || Boolean(spouseMember.dateOfDeath)) : false;
+    },
+    [relationships, members]
+  );
+
   // Trigger add relative for a specific member
   const handleOpenAddRelative = useCallback(
     (member: FamilyMember, defaultType: 'CHILD' | 'SPOUSE' | 'PARENT') => {
-      if (defaultType === 'CHILD' && !memberHasSpouse(member.id)) {
-        toastError('Add a spouse before adding a child.', 'Spouse Required');
-        return;
+      if (defaultType === 'CHILD') {
+        if (!memberHasSpouse(member.id)) {
+          toastError('Add a spouse before adding a child.', 'Spouse Required');
+          return;
+        }
+        if (isMemberSpouseDeceased(member.id)) {
+          toastError('Cannot add child: spouse is deceased.', 'Deceased Spouse');
+          return;
+        }
+      }
+      if (defaultType === 'SPOUSE') {
+        const memberAge = calculateMemberAgeYears(member.dateOfBirth, member.dateOfDeath, member.isLiving);
+        if (memberAge === null || memberAge < 18) {
+          toastError('Must be 18 or older to add a spouse.', 'Underage Member');
+          return;
+        }
+        if (memberHasSpouse(member.id)) {
+          toastError('This member already has a registered spouse.', 'Spouse Exists');
+          return;
+        }
       }
       setTargetReferenceMember(member);
       setRelationshipType(defaultType);
       setIsAddRelationshipOpen(true);
       setShowHint(false);
     },
-    [memberHasSpouse, toastError]
+    [memberHasSpouse, isMemberSpouseDeceased, toastError]
   );
 
   // Photo URL Editing state
@@ -811,6 +880,10 @@ const FamilyTreeInner: React.FC = () => {
                   : {}),
               },
           hasSpouse,
+          isSpouseDeceased:
+            node.data.isSpouseDeceased !== undefined
+              ? node.data.isSpouseDeceased
+              : isMemberSpouseDeceased(memberObj.id),
           isPrimaryPartner,
           isSecondarySpouse,
           hideRelationshipActions,
@@ -945,36 +1018,31 @@ const FamilyTreeInner: React.FC = () => {
     [nodes, layoutResult.nodes.length, reactFlowInstance]
   );
 
-  // Re-center when container dimensions change (resize, fullscreen, sidebar toggle)
+  // Container resize observer: do not jump or re-center camera to preserve user zoom/pan
   useEffect(() => {
     if (!containerRef.current) return;
     const ro = new ResizeObserver(() => {
-      if (members.length <= 2) {
-        centerTreeCanvas(false);
-      }
+      // Intentionally preserve canvas position and zoom on container layout changes
     });
     ro.observe(containerRef.current);
     return () => ro.disconnect();
-  }, [members.length, centerTreeCanvas]);
+  }, []);
 
-  // Initial and reactive centering on family change or member count update
+  // Initial centering on brand new family load only (never jump on member count change or node additions)
   const lastVaultId = useRef<string | null>(null);
-  const prevMemberCount = useRef(members.length);
   useEffect(() => {
     if (layoutResult.nodes.length > 0) {
       const isNewFamily = currentFamily?.id && currentFamily.id !== lastVaultId.current;
-      const isCountChange = members.length !== prevMemberCount.current;
-      if (isNewFamily || isCountChange || !hasInitialFitted.current) {
+      if (isNewFamily || !hasInitialFitted.current) {
         const timer = setTimeout(() => {
-          centerTreeCanvas(true);
+          centerTreeCanvas(false);
           hasInitialFitted.current = true;
           if (currentFamily?.id) lastVaultId.current = currentFamily.id;
-          prevMemberCount.current = members.length;
         }, 150);
         return () => clearTimeout(timer);
       }
     }
-  }, [layoutResult.nodes.length, currentFamily?.id, members.length, centerTreeCanvas]);
+  }, [layoutResult.nodes.length, currentFamily?.id, centerTreeCanvas]);
 
   // When Focus Mode is toggled or member selected in focus mode: smooth pan & zoom
   useEffect(() => {
@@ -1278,11 +1346,8 @@ const FamilyTreeInner: React.FC = () => {
           profilePhoto: formData.photoUrl || undefined,
           generation: 1,
           branchIds: formData.branchId ? [formData.branchId] : [],
-          biography: formData.biography
-            ? formData.notes
-              ? `${formData.biography}\n\nNotes: ${formData.notes}`
-              : formData.biography
-            : formData.notes || undefined,
+          biography: formData.biography ? formData.biography.trim() : undefined,
+          nodeColor: formData.nodeColor || 'yellow',
         };
 
         const memberRes = await authenticatedFetch(`/api/families/${famId}/members`, {
@@ -1312,11 +1377,6 @@ const FamilyTreeInner: React.FC = () => {
           setSelectedMember(createdMember);
           setDrawerTab('profile');
         }
-
-        // Smoothly center the canvas onto the new member / couple
-        setTimeout(() => {
-          centerTreeCanvas(true);
-        }, 200);
 
         success(
           `Added ${formData.firstName} ${formData.lastName} as Root Ancestor. Family tree initialized!`,
@@ -1368,11 +1428,8 @@ const FamilyTreeInner: React.FC = () => {
           : refMember?.branchId && !refMember.branchId.startsWith('branch-')
           ? [refMember.branchId]
           : [],
-        biography: formData.biography
-          ? formData.notes
-            ? `${formData.biography}\n\nNotes: ${formData.notes}`
-            : formData.biography
-          : formData.notes || undefined,
+        biography: formData.biography ? formData.biography.trim() : undefined,
+        nodeColor: formData.nodeColor || 'yellow',
       };
 
       const memberRes = await authenticatedFetch(`/api/families/${famId}/members`, {
@@ -1491,21 +1548,48 @@ const FamilyTreeInner: React.FC = () => {
         throw new Error(relJson?.message || 'Failed to establish relationship in graph');
       }
 
+      // If adding a child to a parent with a registered spouse, also link the co-parent as PARENT
+      if (isAddingChild) {
+        const spouseRel = relationships.find(
+          (r) =>
+            r.relationshipType === 'SPOUSE' &&
+            (r.sourceMemberId === refMember!.id || r.targetMemberId === refMember!.id)
+        );
+        if (spouseRel) {
+          const spousePartnerId =
+            spouseRel.sourceMemberId === refMember!.id
+              ? spouseRel.targetMemberId
+              : spouseRel.sourceMemberId;
+          if (spousePartnerId && spousePartnerId !== refMember!.id) {
+            try {
+              await authenticatedFetch(`/api/families/${famId}/relationships`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  sourceMemberId: spousePartnerId,
+                  targetMemberId: tgtId,
+                  relationshipType: 'PARENT',
+                  siblingOrder: nextChildOrder,
+                  displayOrder: nextChildOrder,
+                }),
+              });
+            } catch {
+              // Graceful if already recorded
+            }
+          }
+        }
+      }
+
       // Refresh the family tree directly from the database
       await fetchFamilyTree(famId);
 
-      // Open profile drawer for the newly created member without selecting node on canvas
+      // Open profile drawer for the newly created member without jumping or panning canvas
       const updatedMembers = useFamilyStore.getState().members;
       const createdMember = updatedMembers.find((m) => m.id === newMemberId);
       if (createdMember) {
         setDrawerMember(createdMember);
         setDrawerTab('profile');
       }
-
-      // Smoothly pan and center the canvas onto the newly created node/couple
-      setTimeout(() => {
-        centerTreeCanvas(true);
-      }, 250);
 
       success(
         `Added ${formData.firstName} ${formData.lastName} as ${relType.toLowerCase()} to ${refMember!.firstName}. Tree updated.`,
@@ -1548,7 +1632,7 @@ const FamilyTreeInner: React.FC = () => {
               <h2 className="text-2xl sm:text-[28px] font-bold text-[#17233C] tracking-tight" data-testid="family-heading-name">
                 {formatFamilyDisplayName(currentFamily?.name)}
               </h2>
-              {isAdmin && (
+              {isSuperAdmin && (
                 <button
                   type="button"
                   data-testid="edit-tree-name-button"
@@ -1557,7 +1641,7 @@ const FamilyTreeInner: React.FC = () => {
                     setIsRenameTreeModalOpen(true);
                   }}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-[#2563EB] hover:bg-blue-50 transition-colors cursor-pointer"
-                  title="Rename Family Tree (Dedicated Family Tree Name)"
+                  title="Rename Family Tree (Master Admin Only)"
                   aria-label="Rename Family Tree"
                 >
                   <Pencil className="w-3.5 h-3.5" />
@@ -2175,11 +2259,11 @@ const FamilyTreeInner: React.FC = () => {
 
                   <div>
                     <h5 className="font-bold text-[#0F172A] mb-1.5 flex items-center justify-between">
-                      <span>Biography & Stories</span>
+                      <span>Biography</span>
                     </h5>
                     <div className="p-3.5 rounded-xl bg-[#F8FAFC] border-[1.5px] border-[#CBD5E1]">
                       <p className="text-[#475569] leading-relaxed text-xs">
-                        {activeDrawerMember.biography || 'No biographical stories recorded for this relative yet.'}
+                        {activeDrawerMember.biography || 'No biography recorded for this relative yet.'}
                       </p>
                     </div>
                   </div>
@@ -2187,7 +2271,20 @@ const FamilyTreeInner: React.FC = () => {
               )}
 
               {/* Tab 2: Family Information (with Add Child & Add Spouse actions) */}
-              {drawerTab === 'family' && (
+              {drawerTab === 'family' && (() => {
+                const isDrawerSpouseDeceased = activeDrawerMember ? isMemberSpouseDeceased(activeDrawerMember.id) : false;
+                const hasDrawerSpouse = Boolean(activeDrawerMember && memberHasSpouse(activeDrawerMember.id));
+                const canDrawerAddChild = Boolean(hasDrawerSpouse && !isDrawerSpouseDeceased);
+                const drawerMemberAge = activeDrawerMember ? calculateMemberAgeYears(activeDrawerMember.dateOfBirth, activeDrawerMember.dateOfDeath, activeDrawerMember.isLiving) : null;
+                const isDrawerUnderage = drawerMemberAge === null || drawerMemberAge < 18;
+                const canDrawerAddSpouse = !hasDrawerSpouse && !isDrawerUnderage;
+                const drawerSpouseTooltip = hasDrawerSpouse
+                  ? 'This member already has a spouse'
+                  : isDrawerUnderage
+                  ? 'Must be 18 or older to add a spouse'
+                  : 'Add Spouse';
+
+                return (
                 <div className="mt-4 space-y-4 text-xs">
                   {/* Functional Quick Actions (Admin Only) */}
                   {isAdmin && (
@@ -2195,15 +2292,17 @@ const FamilyTreeInner: React.FC = () => {
                       <div className="flex-1 flex flex-col gap-1">
                         <button
                           type="button"
-                          disabled={!activeDrawerMember || !memberHasSpouse(activeDrawerMember.id)}
+                          disabled={!canDrawerAddChild}
                           onClick={() => handleOpenAddRelative(activeDrawerMember!, 'CHILD')}
                           title={
-                            activeDrawerMember && memberHasSpouse(activeDrawerMember.id)
-                              ? 'Add Child'
-                              : 'Add a spouse before adding a child.'
+                            !hasDrawerSpouse
+                              ? 'Add a spouse before adding a child.'
+                              : isDrawerSpouseDeceased
+                              ? 'Cannot add child: spouse is deceased.'
+                              : 'Add Child'
                           }
                           className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold shadow-xs transition-colors ${
-                            activeDrawerMember && memberHasSpouse(activeDrawerMember.id)
+                            canDrawerAddChild
                               ? 'bg-[#2563EB] hover:bg-[#1D4ED8] text-white cursor-pointer'
                               : 'opacity-45 cursor-not-allowed bg-slate-200 text-slate-500'
                           }`}
@@ -2211,20 +2310,38 @@ const FamilyTreeInner: React.FC = () => {
                           <UserPlus className="w-3.5 h-3.5" />
                           <span>+ Add Child</span>
                         </button>
-                        {activeDrawerMember && !memberHasSpouse(activeDrawerMember.id) && (
+                        {activeDrawerMember && !hasDrawerSpouse && (
                           <p className="text-[10px] text-amber-600 font-medium text-center">
                             Add a spouse before adding a child.
                           </p>
                         )}
+                        {activeDrawerMember && hasDrawerSpouse && isDrawerSpouseDeceased && (
+                          <p className="text-[10px] text-amber-700 font-medium text-center">
+                            Cannot add child: spouse is deceased.
+                          </p>
+                        )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenAddRelative(activeDrawerMember!, 'SPOUSE')}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white text-[#2563EB] border-[1.5px] border-[#2563EB] hover:bg-[#EFF6FF] text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-                      >
-                        <Heart className="w-3.5 h-3.5" />
-                        <span>+ Add Spouse</span>
-                      </button>
+                      <div className="flex-1 flex flex-col gap-1">
+                        <button
+                          type="button"
+                          disabled={!canDrawerAddSpouse}
+                          onClick={() => handleOpenAddRelative(activeDrawerMember!, 'SPOUSE')}
+                          title={drawerSpouseTooltip}
+                          className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold shadow-xs transition-colors ${
+                            canDrawerAddSpouse
+                              ? 'bg-white text-[#2563EB] border-[1.5px] border-[#2563EB] hover:bg-[#EFF6FF] cursor-pointer'
+                              : 'opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200'
+                          }`}
+                        >
+                          <Heart className="w-3.5 h-3.5" />
+                          <span>+ Add Spouse</span>
+                        </button>
+                        {activeDrawerMember && isDrawerUnderage && (
+                          <p className="text-[10px] text-amber-700 font-medium text-center">
+                            Must be 18 or older to add a spouse.
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -2288,8 +2405,14 @@ const FamilyTreeInner: React.FC = () => {
                         {isAdmin && (
                           <button
                             type="button"
+                            disabled={!canDrawerAddSpouse}
                             onClick={() => handleOpenAddRelative(activeDrawerMember, 'SPOUSE')}
-                            className="text-[11px] font-medium text-[#2563EB] hover:underline cursor-pointer"
+                            title={drawerSpouseTooltip}
+                            className={`text-[11px] font-medium transition-colors ${
+                              canDrawerAddSpouse
+                                ? 'text-[#2563EB] hover:underline cursor-pointer'
+                                : 'text-slate-400 cursor-not-allowed opacity-50'
+                            }`}
                           >
                             + Add Spouse
                           </button>
@@ -2380,6 +2503,7 @@ const FamilyTreeInner: React.FC = () => {
                                     </div>
                                     <input
                                       type="date"
+                                      max={new Date().toISOString().split('T')[0]}
                                       value={spouseMarriageDateInput}
                                       onChange={(e) => setSpouseMarriageDateInput(e.target.value)}
                                       className="w-full rounded-lg border-[1.5px] border-[#CBD5E1] bg-white px-2 py-1 text-xs text-[#0F172A] outline-none focus:ring-1 focus:ring-[#2563EB]"
@@ -2426,15 +2550,17 @@ const FamilyTreeInner: React.FC = () => {
                         </span>
                         <button
                           type="button"
-                          disabled={!activeDrawerMember || !memberHasSpouse(activeDrawerMember.id)}
+                          disabled={!canDrawerAddChild}
                           onClick={() => handleOpenAddRelative(activeDrawerMember!, 'CHILD')}
                           title={
-                            activeDrawerMember && memberHasSpouse(activeDrawerMember.id)
-                              ? 'Add Child'
-                              : 'Add a spouse before adding a child.'
+                            !hasDrawerSpouse
+                              ? 'Add a spouse before adding a child.'
+                              : isDrawerSpouseDeceased
+                              ? 'Cannot add child: spouse is deceased.'
+                              : 'Add Child'
                           }
                           className={`text-[11px] font-medium transition-colors ${
-                            activeDrawerMember && memberHasSpouse(activeDrawerMember.id)
+                            canDrawerAddChild
                               ? 'text-[#2563EB] hover:underline cursor-pointer'
                               : 'text-slate-400 cursor-not-allowed opacity-50'
                           }`}
@@ -2513,7 +2639,7 @@ const FamilyTreeInner: React.FC = () => {
                     )}
                   </div>
                 </div>
-              )}
+              ); })()}
 
               {/* Tab 3: Memories */}
               {drawerTab === 'memories' && (
@@ -2691,28 +2817,28 @@ const FamilyTreeInner: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Ask Gemini Style Right Sidebar: Family Memories, Photos, Videos, Audios & Media Information */}
-        <MemoriesSidePanel
-          isOpen={isMemoriesSidebarOpen}
-          onClose={() => setIsMemoriesSidebarOpen(false)}
-          memories={memories}
-          members={members}
-          familyName={formatFamilyDisplayName(currentFamily?.name)}
-          onSelectMember={(memberId) => {
-            handleJumpToMember(memberId);
-          }}
-          onOpenUploadModal={() => {
-            handleOpenUploadMemoryModal(null);
-          }}
-          onRefreshMemories={() => {
-            const famId = currentFamily?.id || activeFamilyId;
-            if (famId) {
-              fetchMemories(famId);
-            }
-          }}
-        />
       </div>
+
+      {/* Ask Gemini Style Right Sidebar: Family Memories, Photos, Videos & Media Information */}
+      <MemoriesSidePanel
+        isOpen={isMemoriesSidebarOpen}
+        onClose={() => setIsMemoriesSidebarOpen(false)}
+        memories={memories}
+        members={members}
+        familyName={formatFamilyDisplayName(currentFamily?.name)}
+        onSelectMember={(memberId) => {
+          handleJumpToMember(memberId);
+        }}
+        onOpenUploadModal={() => {
+          handleOpenUploadMemoryModal(null);
+        }}
+        onRefreshMemories={() => {
+          const famId = currentFamily?.id || activeFamilyId;
+          if (famId) {
+            fetchMemories(famId);
+          }
+        }}
+      />
 
       {/* Add Relative / Relationship Modal */}
       <AddMemberModal
@@ -2724,6 +2850,11 @@ const FamilyTreeInner: React.FC = () => {
         referenceMemberHasSpouse={
           (targetReferenceMember || selectedMember)
             ? memberHasSpouse((targetReferenceMember || selectedMember)!.id)
+            : false
+        }
+        isReferenceMemberSpouseDeceased={
+          (targetReferenceMember || selectedMember)
+            ? isMemberSpouseDeceased((targetReferenceMember || selectedMember)!.id)
             : false
         }
         initialRelationshipType={relationshipType}

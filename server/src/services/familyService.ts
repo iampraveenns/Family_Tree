@@ -6,6 +6,7 @@ import { auditService } from './auditService.ts';
 import { Family, IFamily } from '../models/Family.ts';
 import { NotFoundError, ValidationError } from '../utils/errors.ts';
 import { AuditAction, ErrorCode, Role, DEFAULT_ROLE_PERMISSIONS } from '../constants/index.ts';
+import { sqlDatabase } from '../db/sqlDatabase.ts';
 
 export interface ServiceContext {
   userId?: string;
@@ -78,6 +79,17 @@ export class FamilyService {
 
   async updateFamily(familyId: string, data: Partial<IFamily>, context?: ServiceContext): Promise<IFamily> {
     await this.getFamilyById(familyId, context);
+
+    // Enforce Master Admin lockdown: prevent renaming provisioned family trees by regular admins
+    if (data.name) {
+      const sqlCustomer = sqlDatabase.getCustomerByFamilyTreeId(familyId);
+      if (sqlCustomer) {
+        const isSuperAdmin = context?.role === Role.SUPER_ADMIN || (context as any)?.userRole === Role.SUPER_ADMIN;
+        if (!isSuperAdmin) {
+          data.name = sqlCustomer.family_tree_name;
+        }
+      }
+    }
 
     const updated = await familyRepository.update(familyId, data);
     if (!updated) {

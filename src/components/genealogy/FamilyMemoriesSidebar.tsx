@@ -164,8 +164,7 @@ export const FamilyMemoriesSidebar: React.FC<FamilyMemoriesSidebarProps> = ({
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 440, opacity: 0 }}
         transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-        data-testid="family-memories-sidebar"
-        className="absolute right-0 top-0 bottom-0 w-88 sm:w-[430px] bg-white/95 backdrop-blur-md border-l-[1.5px] border-[#CBD5E1] shadow-2xl z-32 flex flex-col overflow-hidden"
+        className="fixed top-14 bottom-0 right-0 h-[calc(100vh-3.5rem)] w-88 sm:w-[430px] bg-white/95 backdrop-blur-md border-l-[1.5px] border-[#CBD5E1] shadow-2xl z-50 flex flex-col overflow-hidden"
       >
         {/* =========================================================
             1. Chrome "Ask Gemini"-Style Header
@@ -312,28 +311,10 @@ export const FamilyMemoriesSidebar: React.FC<FamilyMemoriesSidebarProps> = ({
               }`}
             >
               <Headphones className="w-3.5 h-3.5" />
-              <span>Audios</span>
+              <span>Audio</span>
               {counts.audios > 0 && (
                 <span className={`text-[10px] px-1 rounded-full ${activeTab === 'AUDIO' ? 'bg-white/20' : 'bg-slate-200'}`}>
                   {counts.audios}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('STORY_DOC')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'STORY_DOC'
-                  ? 'bg-[#2563EB] text-white font-semibold shadow-2xs'
-                  : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Stories & Docs</span>
-              {counts.storiesDocs > 0 && (
-                <span className={`text-[10px] px-1 rounded-full ${activeTab === 'STORY_DOC' ? 'bg-white/20' : 'bg-slate-200'}`}>
-                  {counts.storiesDocs}
                 </span>
               )}
             </button>
@@ -369,7 +350,7 @@ export const FamilyMemoriesSidebar: React.FC<FamilyMemoriesSidebarProps> = ({
         {/* =========================================================
             4. Memories Scrollable Content Feed
             ========================================================= */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
           {filteredMemories.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center p-8 text-slate-500 mt-8">
               <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center mb-3">
@@ -540,28 +521,27 @@ export const FamilyMemoriesSidebar: React.FC<FamilyMemoriesSidebarProps> = ({
 
                     {/* Tagged Relatives */}
                     {taggedMembers.length > 0 && (
-                      <div className="mt-3 pt-2.5 border-t border-[#F1F5F9]">
-                        <span className="text-[10px] uppercase font-bold text-[#94A3B8] tracking-wider block mb-1.5">
-                          Relatives in Memory
+                      <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5">
+                        <span className="text-[10px] font-semibold text-[#64748B] flex items-center gap-1">
+                          <span>Tagged in tree:</span>
                         </span>
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {taggedMembers.map((rel) => (
                             <button
                               key={rel.id}
                               type="button"
                               onClick={() => onSelectMember?.(rel)}
-                              title={`Focus on ${rel.firstName} ${rel.lastName} on the family tree`}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-[#2563EB] text-[11px] font-medium text-[#1E293B] border border-slate-200 transition-colors cursor-pointer"
+                              title={`Focus on ${rel.displayName || `${rel.firstName} ${rel.lastName}`} on the family tree`}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50/80 hover:bg-blue-100/90 text-[#1D4ED8] text-[11px] font-medium transition-colors cursor-pointer border border-blue-200 shadow-2xs"
                             >
                               <MemberAvatar
+                                member={rel}
                                 name={`${rel.firstName} ${rel.lastName}`}
                                 src={rel.profilePhoto || (rel as any).profileImageUrl}
                                 gender={rel.gender}
                                 size="xs"
-                                className="w-4 h-4 rounded-full"
                               />
-                              <span>{rel.firstName}</span>
-                              <ExternalLink className="w-2.5 h-2.5 text-slate-400 group-hover:text-[#2563EB]" />
+                              <span>{rel.displayName || `${rel.firstName} ${rel.lastName}`}</span>
                             </button>
                           ))}
                         </div>

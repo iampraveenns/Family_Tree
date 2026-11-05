@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   X,
   Calendar,
@@ -33,6 +33,16 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
   members,
   onSelectMember,
 }) => {
+  // Prevent background page scrolling while lightbox is active
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen || !memory) return null;
 
   const mType = (memory.memoryType || (memory as any).type || 'PHOTO').toUpperCase();
@@ -41,7 +51,7 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
 
   const videoAsset = memory.media?.find((a) => a.mimeType?.startsWith('video/'));
   const audioAsset = memory.media?.find((a) => a.mimeType?.startsWith('audio/'));
-  const videoUrl = getMemoryVideoUrl(memory) || (videoAsset ? resolveMediaStreamUrl(videoAsset) : null);
+  const videoUrl = getMemoryVideoUrl(memory) || (videoAsset ? resolveMediaStreamUrl(videoAsset, undefined, true) : null);
   const audioUrl = getMemoryAudioUrl(memory) || (audioAsset ? resolveMediaStreamUrl(audioAsset) : null);
 
   // Resolve tagged members
@@ -62,29 +72,29 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
       role="dialog"
       aria-modal="true"
       aria-label={`Media detail for ${memory.title}`}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-20 pb-8 px-3 sm:px-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-3xl bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150 border border-slate-200"
+        className="relative w-full max-w-3xl bg-[#FFF8D6] rounded-3xl overflow-hidden shadow-2xl flex flex-col h-auto max-h-[calc(100vh-6.5rem)] animate-in zoom-in-95 duration-150 border-2 border-[#F5E7A3] my-auto text-[#263449]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Top Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50/80">
-          <div className="flex items-center gap-2.5">
+        {/* Top Header - Fixed & Locked with Soft Butter-Yellow Styling */}
+        <div className="flex items-center justify-between p-4 border-b border-[#F5E7A3] bg-[#FFF8D6] shrink-0 z-10">
+          <div className="flex items-center gap-3 min-w-0">
             <MemberAvatar
               member={authorMember || ({ firstName: authorName.split(' ')[0] || 'F', lastName: authorName.split(' ')[1] || 'M' } as any)}
               src={authorPhoto || authorMember?.profilePhoto}
               gender={authorMember?.gender}
               size="sm"
-              className="w-8 h-8 ring-1.5 ring-blue-500/20 shrink-0"
+              className="w-9 h-9 ring-2 ring-[#F5E7A3] shrink-0"
             />
-            <div>
-              <h3 className="text-base font-bold text-[#0F172A] leading-tight truncate">
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-[#263449] leading-tight truncate">
                 {memory.title}
               </h3>
-              <p className="text-[11px] text-slate-500">
-                {mType} Memory {formattedDate ? `• ${formattedDate}` : ''} • Added by <strong className="text-blue-700">{authorName}</strong>
+              <p className="text-[11px] text-[#263449]/70 truncate">
+                {mType} Memory {formattedDate ? `• ${formattedDate}` : ''} • Added by <strong className="text-[#263449] font-bold">{authorName}</strong>
               </p>
             </div>
           </div>
@@ -93,22 +103,24 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
             type="button"
             onClick={onClose}
             aria-label="Close dialog"
-            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-full transition-colors cursor-pointer"
+            className="p-2 text-[#263449]/70 hover:text-[#263449] hover:bg-[#F5E7A3]/50 rounded-full transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Media Presentation Stage */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Media Presentation Stage - Fixed & Positionally Stable */}
+        <div className="shrink-0 w-full bg-black flex items-center justify-center overflow-hidden max-h-[50vh]">
           {videoUrl || mType === 'VIDEO' ? (
-            <div className="w-full bg-black aspect-video flex items-center justify-center">
+            <div className="w-full aspect-video max-h-[50vh] flex items-center justify-center bg-black">
               {videoUrl ? (
                 <video
                   src={videoUrl}
                   controls
+                  autoPlay
                   playsInline
-                  preload="metadata"
+                  preload="auto"
+                  poster={coverUrl || undefined}
                   className="w-full h-full max-h-[50vh] object-contain"
                 />
               ) : coverUrl ? (
@@ -119,61 +131,64 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
                 />
               ) : (
                 <div className="p-12 text-center text-white/70">
-                  <Video className="w-12 h-12 mx-auto mb-2 text-blue-400" />
+                  <Video className="w-12 h-12 mx-auto mb-2 text-[#D4B83E]" />
                   <p className="text-sm">Video file recorded</p>
                 </div>
               )}
             </div>
           ) : audioUrl || mType === 'AUDIO' ? (
-            <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-b border-slate-200 flex flex-col items-center justify-center text-center">
-              <div className="w-16 h-16 rounded-2xl bg-[#2563EB] text-white flex items-center justify-center mb-3 shadow-md">
-                <Headphones className="w-8 h-8" />
+            <div className="w-full p-6 bg-[#FFF8D6] border-b border-[#F5E7A3] flex flex-col items-center justify-center text-center">
+              <div className="w-14 h-14 rounded-2xl bg-[#D4B83E] text-white flex items-center justify-center mb-3 shadow-md">
+                <Headphones className="w-7 h-7" />
               </div>
-              <h4 className="text-sm font-bold text-[#1E3A8A] mb-1">Spoken Family Narrative</h4>
-              <p className="text-xs text-slate-600 mb-4 max-w-md">
+              <h4 className="text-sm font-bold text-[#263449] mb-1">Spoken Family Narrative</h4>
+              <p className="text-xs text-[#263449]/80 mb-4 max-w-md">
                 Listen to oral recollections and historical audio preserved by family members.
               </p>
               {audioUrl ? (
                 <audio controls src={audioUrl} className="w-full max-w-md" autoPlay />
               ) : (
-                <p className="text-xs text-slate-500 italic">Audio recording preserved in vault.</p>
+                <p className="text-xs text-[#263449]/60 italic">Audio recording preserved in vault.</p>
               )}
             </div>
           ) : coverUrl ? (
-            <div className="w-full bg-slate-900 flex items-center justify-center max-h-[55vh] overflow-hidden">
+            <div className="w-full bg-slate-900 flex items-center justify-center max-h-[50vh] overflow-hidden">
               <img
                 src={coverUrl}
                 alt={memory.title}
-                className="w-full h-full object-contain max-h-[55vh]"
+                className="w-full h-full object-contain max-h-[50vh]"
               />
             </div>
           ) : null}
+        </div>
 
+        {/* Scrollable Chronicle & Tagged Members Details Area */}
+        <div className="flex-1 min-h-0 overflow-y-auto bg-[#FFF8D6]">
           {/* Metadata Details */}
           <div className="p-5 space-y-4">
             {/* Description */}
             {memory.description && (
               <div>
-                <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                <h5 className="text-xs font-bold uppercase tracking-wider text-[#263449]/70 mb-1">
                   Chronicle & Narrative
                 </h5>
-                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                <p className="text-sm text-[#263449] leading-relaxed whitespace-pre-line">
                   {memory.description}
                 </p>
               </div>
             )}
 
             {/* Event Date and Location */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-100 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-[#F5E7A3] text-xs">
               {formattedDate && (
-                <div className="flex items-center gap-2 text-slate-700">
-                  <Calendar className="w-4 h-4 text-[#2563EB] shrink-0" />
+                <div className="flex items-center gap-2 text-[#263449]">
+                  <Calendar className="w-4 h-4 text-[#D4B83E] shrink-0" />
                   <span><strong>Date:</strong> {formattedDate}</span>
                 </div>
               )}
               {memory.location && (
-                <div className="flex items-center gap-2 text-slate-700">
-                  <MapPin className="w-4 h-4 text-[#2563EB] shrink-0" />
+                <div className="flex items-center gap-2 text-[#263449]">
+                  <MapPin className="w-4 h-4 text-[#D4B83E] shrink-0" />
                   <span><strong>Location:</strong> {memory.location}</span>
                 </div>
               )}
@@ -181,11 +196,11 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
 
             {/* Tagged Relatives */}
             {taggedMembers.length > 0 && (
-              <div className="pt-3 border-t border-slate-100">
-                <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                  Relatives Linked to this Memory
-                </h5>
-                <div className="flex flex-wrap gap-2">
+              <div className="pt-3 border-t border-[#F5E7A3] flex flex-col gap-1.5">
+                <span className="text-[10px] font-semibold text-[#263449]/70 flex items-center gap-1">
+                  <span>Tagged in tree:</span>
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
                   {taggedMembers.map((rel) => (
                     <button
                       key={rel.id}
@@ -194,17 +209,17 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
                         onClose();
                         onSelectMember?.(rel);
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-[#2563EB] text-xs font-medium text-slate-800 border border-slate-200 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/90 hover:bg-[#FFF8D6] text-[#263449] text-[11px] font-medium transition-colors cursor-pointer border border-[#F5E7A3] shadow-2xs"
+                      title={`Focus ${rel.displayName || `${rel.firstName} ${rel.lastName}`} in family tree`}
                     >
                       <MemberAvatar
+                        member={rel}
                         name={`${rel.firstName} ${rel.lastName}`}
                         src={rel.profilePhoto || (rel as any).profileImageUrl}
                         gender={rel.gender}
                         size="xs"
-                        className="w-5 h-5 rounded-full"
                       />
-                      <span>{rel.firstName} {rel.lastName}</span>
-                      <ExternalLink className="w-3 h-3 text-slate-400" />
+                      <span>{rel.displayName || `${rel.firstName} ${rel.lastName}`}</span>
                     </button>
                   ))}
                 </div>
@@ -213,9 +228,9 @@ export const MediaDetailLightboxModal: React.FC<MediaDetailLightboxModalProps> =
 
             {/* Tags */}
             {memory.tags && memory.tags.length > 0 && (
-              <div className="pt-2 flex flex-wrap gap-1.5 text-xs text-slate-500">
+              <div className="pt-2 flex flex-wrap gap-1.5 text-xs text-[#263449]/70">
                 {memory.tags.map((t, i) => (
-                  <span key={i} className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                  <span key={i} className="px-2 py-0.5 rounded-md bg-white/80 border border-[#F5E7A3] text-[#263449]">
                     #{t}
                   </span>
                 ))}

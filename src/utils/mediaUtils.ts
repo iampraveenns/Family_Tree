@@ -3,7 +3,11 @@ import { Memory, MediaAsset, FamilyMember } from '../types/index.ts';
 /**
  * Resolves a streamable or viewable image URL from any media asset or media ID.
  */
-export function resolveMediaStreamUrl(media?: any, fallbackMediaId?: any): string | null {
+/**
+ * Resolves a streamable or viewable URL from any media asset or media ID.
+ * @param isVideo If true, prevents returning image/SVG thumbnail URLs for video playback.
+ */
+export function resolveMediaStreamUrl(media?: any, fallbackMediaId?: any, isVideo = false): string | null {
   if (!media && !fallbackMediaId) return null;
 
   // 1. If media is direct string URL
@@ -21,10 +25,17 @@ export function resolveMediaStreamUrl(media?: any, fallbackMediaId?: any): strin
 
   // 2. Direct properties on media object
   if (media && typeof media === 'object') {
+    const isMediaVideo =
+      isVideo ||
+      media.mimeType?.startsWith('video/') ||
+      (typeof media.storageKey === 'string' && /\.(mp4|webm|mov|mkv)$/i.test(media.storageKey)) ||
+      (typeof media.originalFileName === 'string' && /\.(mp4|webm|mov|mkv)$/i.test(media.originalFileName));
+
     if (media.streamUrl && typeof media.streamUrl === 'string' && !media.streamUrl.includes('unsplash.com')) {
       return media.streamUrl;
     }
-    if (media.thumbnailUrl && typeof media.thumbnailUrl === 'string' && !media.thumbnailUrl.includes('unsplash.com')) {
+    // Only return thumbnailUrl if NOT resolving for video playback (to avoid SVG posters inside <video>)
+    if (!isMediaVideo && media.thumbnailUrl && typeof media.thumbnailUrl === 'string' && !media.thumbnailUrl.includes('unsplash.com')) {
       return media.thumbnailUrl;
     }
     if (media.url && typeof media.url === 'string' && !media.url.includes('unsplash.com')) {
@@ -32,6 +43,9 @@ export function resolveMediaStreamUrl(media?: any, fallbackMediaId?: any): strin
     }
     if (media.coverMediaUrl && typeof media.coverMediaUrl === 'string' && !media.coverMediaUrl.includes('unsplash.com')) {
       return media.coverMediaUrl;
+    }
+    if (typeof media.storageKey === 'string' && (media.storageKey.startsWith('data:') || media.storageKey.startsWith('http'))) {
+      return media.storageKey;
     }
 
     const id = media._id || media.id;
@@ -67,7 +81,7 @@ export function resolveMediaStreamUrl(media?: any, fallbackMediaId?: any): strin
       if (fallbackMediaId.streamUrl && !fallbackMediaId.streamUrl.includes('unsplash.com')) {
         return fallbackMediaId.streamUrl;
       }
-      if (fallbackMediaId.thumbnailUrl && !fallbackMediaId.thumbnailUrl.includes('unsplash.com')) {
+      if (!isVideo && fallbackMediaId.thumbnailUrl && !fallbackMediaId.thumbnailUrl.includes('unsplash.com')) {
         return fallbackMediaId.thumbnailUrl;
       }
     }
@@ -89,20 +103,20 @@ export function getMemoryCoverUrl(memory: Memory | any): string | null {
 
   // From coverMedia object
   if (memory.coverMedia) {
-    const url = resolveMediaStreamUrl(memory.coverMedia);
+    const url = resolveMediaStreamUrl(memory.coverMedia, undefined, false);
     if (url) return url;
   }
 
   // From coverMediaId
   if (memory.coverMediaId) {
-    const url = resolveMediaStreamUrl(memory.coverMediaId, memory.coverMediaId);
+    const url = resolveMediaStreamUrl(memory.coverMediaId, memory.coverMediaId, false);
     if (url) return url;
   }
 
   // From media array
   if (Array.isArray(memory.media) && memory.media.length > 0) {
     for (const item of memory.media) {
-      const url = resolveMediaStreamUrl(item);
+      const url = resolveMediaStreamUrl(item, undefined, false);
       if (url) return url;
     }
   }
@@ -112,63 +126,79 @@ export function getMemoryCoverUrl(memory: Memory | any): string | null {
 
 /**
  * Resolves the video streaming/playback URL for a memory item.
- * Checks media array, videoAsset, mediaUrl, coverMedia, and coverMediaUrl.
+ * Checks media array, videoAsset, mediaUrl, coverMedia, and coverMediaUrl without ever returning SVG posters.
  */
 export function getMemoryVideoUrl(memory: Memory | any): string | null {
   if (!memory) return null;
 
-  // 1. Direct videoUrl or mediaUrl
+  // 1. Direct videoUrl
   if (memory.videoUrl && typeof memory.videoUrl === 'string') return memory.videoUrl;
-  if (memory.mediaUrl && typeof memory.mediaUrl === 'string') return memory.mediaUrl;
 
-  // 2. Search media array for video asset
+  // 2. Direct mediaUrl if not an image or if memory is VIDEO
+  const isVideoType = (memory.memoryType || memory.type || '').toUpperCase() === 'VIDEO';
+  if (memory.mediaUrl && typeof memory.mediaUrl === 'string') {
+    if (isVideoType || /\.(mp4|webm|mov|mkv)$/i.test(memory.mediaUrl) || memory.mediaUrl.startsWith('data:video/')) {
+      return memory.mediaUrl;
+    }
+  }
+
+  // 3. Search media array for video asset
   if (Array.isArray(memory.media) && memory.media.length > 0) {
     const videoAsset = memory.media.find((item: any) => {
       if (!item) return false;
       if (item.mimeType?.startsWith('video/')) return true;
-      const fn = (item.originalFileName || item.storageKey || item.url || '').toLowerCase();
+      const fn = (item.originalFileName || item.storageKey || item.url || item.streamUrl || '').toLowerCase();
       return fn.endsWith('.mp4') || fn.endsWith('.webm') || fn.endsWith('.mov') || fn.endsWith('.mkv');
     });
     if (videoAsset) {
-      const url = resolveMediaStreamUrl(videoAsset);
+      const url = resolveMediaStreamUrl(videoAsset, undefined, true);
       if (url) return url;
     }
   }
 
-  // 3. From coverMedia if video
+  // 4. From coverMedia if video
   if (memory.coverMedia) {
     const cm = memory.coverMedia;
     const isVid =
       cm.mimeType?.startsWith('video/') ||
       (cm.storageKey && /\.(mp4|webm|mov|mkv)$/i.test(cm.storageKey)) ||
       (cm.originalFileName && /\.(mp4|webm|mov|mkv)$/i.test(cm.originalFileName));
-    if (isVid) {
-      const url = resolveMediaStreamUrl(cm);
+    if (isVid || isVideoType) {
+      const url = resolveMediaStreamUrl(cm, undefined, true);
       if (url) return url;
     }
   }
 
-  // 4. If memoryType is VIDEO, fallback to coverMedia / coverMediaUrl / first media
-  const type = (memory.memoryType || memory.type || '').toUpperCase();
-  if (type === 'VIDEO') {
+  // 5. If memoryType is VIDEO, fallback to coverMedia / coverMediaUrl / first media item
+  if (isVideoType) {
     if (memory.coverMediaUrl && !memory.coverMediaUrl.includes('unsplash.com')) {
       return memory.coverMediaUrl;
     }
     if (memory.coverMedia) {
-      const url = resolveMediaStreamUrl(memory.coverMedia);
+      const url = resolveMediaStreamUrl(memory.coverMedia, undefined, true);
       if (url) return url;
     }
     if (memory.coverMediaId) {
-      const url = resolveMediaStreamUrl(memory.coverMediaId, memory.coverMediaId);
+      const url = resolveMediaStreamUrl(memory.coverMediaId, memory.coverMediaId, true);
       if (url) return url;
     }
     if (Array.isArray(memory.media) && memory.media.length > 0) {
-      const url = resolveMediaStreamUrl(memory.media[0]);
+      const url = resolveMediaStreamUrl(memory.media[0], undefined, true);
       if (url) return url;
     }
   }
 
   return null;
+}
+
+/**
+ * Returns a safely formatted video preview URL for <video> elements.
+ * Prevents hash fragment append on data/blob URLs which can break playback.
+ */
+export function getVideoPreviewSrc(url: string | null | undefined): string {
+  if (!url) return '';
+  if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+  return url.includes('#') ? url : `${url}#t=0.1`;
 }
 
 /**
@@ -249,15 +279,10 @@ export function getMemoryAudioUrl(memory: Memory | any): string | null {
  * Formats a family name to the canonical format (e.g. "Pattara Family", "Sikawath Family").
  */
 export function formatFamilyDisplayName(rawName?: string | null): string {
-  if (!rawName || !rawName.trim()) return 'Pattara family';
+  if (!rawName || !rawName.trim()) return 'Pattara Family';
   const clean = rawName.trim();
   if (clean.toLowerCase() === 'family vault') return 'Family Vault';
-  if (/family$/i.test(clean)) {
-    const base = clean.replace(/family$/i, '').trim();
-    if (!base) return 'Family';
-    return `${base.charAt(0).toUpperCase() + base.slice(1)} family`;
-  }
-  return `${clean.charAt(0).toUpperCase() + clean.slice(1)} family`;
+  return clean;
 }
 
 /**

@@ -277,18 +277,22 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.VIEW_MEMBER,
     Permission.VIEW_MEMORY,
     Permission.UPLOAD_MEMORY,
+    Permission.EDIT_MEMORY,
+    Permission.DELETE_MEMORY,
   ],
   [Role.MEMBER]: [
     Permission.VIEW_FAMILY,
     Permission.VIEW_MEMBER,
     Permission.VIEW_MEMORY,
     Permission.UPLOAD_MEMORY,
+    Permission.EDIT_MEMORY,
   ],
   [Role.CONTRIBUTOR]: [
     Permission.VIEW_FAMILY,
     Permission.VIEW_MEMBER,
     Permission.VIEW_MEMORY,
     Permission.UPLOAD_MEMORY,
+    Permission.EDIT_MEMORY,
   ],
 };
 

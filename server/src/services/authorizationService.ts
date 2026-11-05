@@ -360,23 +360,29 @@ export class AuthorizationService {
 
     const effectiveRole = normalizeRole(membership.role);
 
-    // Admins have full management authority
-    if (effectiveRole === Role.ADMIN) {
+    // 1. Admins and Super Admins have full management authority
+    if (effectiveRole === Role.ADMIN || effectiveRole === Role.SUPER_ADMIN) {
       return { allowed: true };
     }
 
-    // Check base permission
+    // 2. Creator can always edit, upload media to, or delete their own active memory
+    const memoryCreatedByStr =
+      typeof memory.createdBy === 'object' && memory.createdBy !== null
+        ? (memory.createdBy as any)._id?.toString() || (memory.createdBy as any).id?.toString() || memory.createdBy.toString()
+        : memory.createdBy?.toString();
+    const actorUserIdStr = actorUserId.toString();
+
+    if (memoryCreatedByStr && memoryCreatedByStr === actorUserIdStr) {
+      return { allowed: true };
+    }
+
+    // 3. Check base permission
     const hasPerm =
       hasPermission(membership.role, action) ||
       (membership.permissions && membership.permissions.includes(action));
 
     if (!hasPerm) {
       return { allowed: false, reason: `Actor lacks ${action} permission` };
-    }
-
-    // Creator can always edit or delete their own active memory
-    if (memory.createdBy.toString() === actorUserId.toString()) {
-      return { allowed: true };
     }
 
     // Branch managers can manage memories strictly within their branch

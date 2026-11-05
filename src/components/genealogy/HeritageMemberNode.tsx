@@ -14,6 +14,7 @@ import { FamilyMember } from '../../types/index.ts';
 import { MemberAvatar } from '../ui/MemberAvatar.tsx';
 import { Badge } from '../ui/Badge.tsx';
 import { ProfilePhotoLightboxModal } from './ProfilePhotoLightboxModal.tsx';
+import { getNodeColorPalette } from '../../constants/nodeColors.ts';
 
 export interface HeritageMemberNodeData {
   member: FamilyMember;
@@ -24,6 +25,7 @@ export interface HeritageMemberNodeData {
   isHoverRelated?: boolean;
   isPathHighlighted?: boolean;
   hasSpouse?: boolean;
+  isSpouseDeceased?: boolean;
   isPrimaryPartner?: boolean;
   isSecondarySpouse?: boolean;
   hideRelationshipActions?: boolean;
@@ -127,6 +129,37 @@ export interface NodeDateRow {
   text: string;
 }
 
+export function calculateMemberAgeYears(
+  dateOfBirth?: string | null,
+  dateOfDeath?: string | null,
+  isLiving: boolean = true
+): number | null {
+  if (!dateOfBirth || !dateOfBirth.trim()) return null;
+  const rawDob = dateOfBirth.trim();
+  const dob = new Date(
+    rawDob.includes('T') ? rawDob.split('T')[0] : /^\d{4}$/.test(rawDob) ? `${rawDob}-01-01` : rawDob.slice(0, 10)
+  );
+  if (isNaN(dob.getTime())) return null;
+
+  let end: Date;
+  if (!isLiving && dateOfDeath && dateOfDeath.trim()) {
+    const rawDod = dateOfDeath.trim();
+    end = new Date(
+      rawDod.includes('T') ? rawDod.split('T')[0] : /^\d{4}$/.test(rawDod) ? `${rawDod}-01-01` : rawDod.slice(0, 10)
+    );
+    if (isNaN(end.getTime())) end = new Date();
+  } else {
+    end = new Date();
+  }
+
+  let age = end.getFullYear() - dob.getFullYear();
+  const m = end.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && end.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 export function getNodeDateRows(
   member: {
     dateOfBirth?: string | null;
@@ -195,6 +228,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
     isHoverRelated,
     isPathHighlighted,
     hasSpouse = false,
+    isSpouseDeceased = false,
     isPrimaryPartner = true,
     isSecondarySpouse = false,
     hideRelationshipActions = false,
@@ -223,6 +257,18 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
     ((member as any).spouses && (member as any).spouses.length > 0) ||
     ((member as any).spouseIds && (member as any).spouseIds.length > 0)
   );
+
+  const memberAge = calculateMemberAgeYears(member.dateOfBirth, member.dateOfDeath, member.isLiving);
+  const isUnderage = memberAge === null || memberAge < 18;
+  const isSpouseDisabled = Boolean(memberHasSpouse || isUnderage);
+  const spouseTooltip = memberHasSpouse
+    ? 'This member already has a spouse'
+    : isUnderage
+    ? 'Must be 18 or older to add a spouse'
+    : 'Add Spouse to this member';
+
+  // Resolved pastel palette (defaults to soft butter-yellow pastel #FFF8D6 / #F5E7A3 / #263449)
+  const nodePalette = getNodeColorPalette(member.nodeColor || 'yellow');
 
   // Subtle branch accent color mapping using harmonious blue shades
   const getBranchConfig = () => {
@@ -426,22 +472,31 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
       style={{
         width: 280,
         height: 160,
+        backgroundColor: nodePalette.background,
+        borderColor: isPathHighlighted || isSelected || isFocused
+          ? '#2563EB'
+          : isHovered
+          ? '#94A3B8'
+          : isHoverRelated
+          ? '#CBD5E1'
+          : nodePalette.border,
+        color: nodePalette.text,
       }}
       aria-label={`Family member ${fullName}, Generation ${member.generation}`}
-      className={`group relative w-[280px] h-[160px] box-border rounded-2xl border-[1.5px] p-2.5 transition-all duration-200 ease-out cursor-default select-none outline-none flex flex-col justify-between bg-gradient-to-br from-[#F8FAFC] via-[#F1F5F9] to-[#E2E8F0] ${
+      className={`group relative w-[280px] h-[160px] box-border rounded-2xl border-[1.5px] p-2.5 transition-all duration-200 ease-out cursor-default select-none outline-none flex flex-col justify-between shadow-xs ${
         isPhotoMenuOpen ? 'overflow-visible z-50' : 'overflow-hidden'
       } ${
         isPathHighlighted
-          ? 'border-[#2563EB] shadow-[0_0_0_2px_#94A3B8,0_8px_24px_rgba(37,99,235,0.18)] z-30'
+          ? 'shadow-[0_0_0_2px_#94A3B8,0_8px_24px_rgba(37,99,235,0.18)] z-30'
           : isSelected
-          ? 'border-[#2563EB] shadow-[0_0_0_2px_#94A3B8,0_8px_24px_rgba(37,99,235,0.18)] -translate-y-0.5 z-30'
+          ? 'shadow-[0_0_0_2px_#94A3B8,0_8px_24px_rgba(37,99,235,0.18)] -translate-y-0.5 z-30'
           : isFocused
-          ? 'border-[#2563EB] shadow-[0_4px_16px_rgba(37,99,235,0.14)] z-20'
+          ? 'shadow-[0_4px_16px_rgba(37,99,235,0.14)] z-20'
           : isHovered
-          ? 'border-slate-400 -translate-y-0.5 shadow-md z-20'
+          ? '-translate-y-0.5 shadow-md z-20'
           : isHoverRelated
-          ? 'border-slate-300 shadow-sm'
-          : 'border-slate-300 shadow-sm hover:border-slate-400 hover:-translate-y-0.5 hover:shadow-md'
+          ? 'shadow-xs'
+          : 'shadow-xs hover:-translate-y-0.5 hover:shadow-md'
       } ${isDimmed ? 'opacity-55' : isHoverRelated || isFocused ? 'opacity-95' : 'opacity-100'}`}
     >
       {/* Top Handle (Parent connections) */}
@@ -696,7 +751,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
         )}
 
         <div className="flex-1 min-w-0">
-          <h4 className="text-[13.5px] font-bold text-[#17233C] truncate group-hover:text-[#2563EB] transition-colors leading-snug">
+          <h4 className="text-[13.5px] font-bold text-[#263449] truncate group-hover:text-[#2563EB] transition-colors leading-snug">
             {fullName}
           </h4>
 
@@ -709,7 +764,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
                 .map((row, idx) => (
                   <p
                     key={`dob-${idx}`}
-                    className="truncate whitespace-nowrap text-[#17233C]"
+                    className="truncate whitespace-nowrap text-[#263449]"
                     title={row.text}
                   >
                     {row.text}
@@ -722,7 +777,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
                   {houseName && (
                     <p
                       data-testid={`node-housename-${member.id}`}
-                      className="truncate whitespace-nowrap text-[#17233C]"
+                      className="truncate whitespace-nowrap text-[#263449]"
                       title={`Housename: ${houseName}`}
                     >
                       Housename: {houseName}
@@ -731,7 +786,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
                   {location && (
                     <p
                       data-testid={`node-location-${member.id}`}
-                      className="truncate whitespace-nowrap text-[#17233C]"
+                      className="truncate whitespace-nowrap text-[#263449]"
                       title={`Location: ${location}`}
                     >
                       Location: {location}
@@ -740,7 +795,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
                 </>
               )}
 
-              {/* 3. DOM & DOD fields (DOM displayed in same #17233C color as Location & DOB) */}
+              {/* 3. DOM & DOD fields (DOM displayed in same #263449 color as Location & DOB) */}
               {dateRows
                 .filter((r) => r.label !== 'DOB')
                 .map((row, idx) => (
@@ -750,7 +805,7 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
                     className={`truncate whitespace-nowrap ${
                       row.label === 'DOD'
                         ? 'text-[#64748B]'
-                        : 'text-[#17233C]'
+                        : 'text-[#263449]'
                     }`}
                     title={row.text}
                   >
@@ -776,10 +831,10 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
           <div className="flex items-center gap-1">
             <button
               type="button"
-              disabled={!hasSpouse}
+              disabled={!hasSpouse || isSpouseDeceased}
               onClick={(e) => {
                 e.stopPropagation();
-                if (hasSpouse) {
+                if (hasSpouse && !isSpouseDeceased) {
                   onAddRelative?.(member, 'CHILD');
                 }
               }}
@@ -789,15 +844,27 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (hasSpouse) {
+                  if (hasSpouse && !isSpouseDeceased) {
                     onAddRelative?.(member, 'CHILD');
                   }
                 }
               }}
-              title={hasSpouse ? "Add Child to this member" : "Add a spouse before adding a child."}
-              aria-label={hasSpouse ? `Add Child to ${fullName}` : `Add Child to ${fullName} (Requires spouse)`}
+              title={
+                !hasSpouse
+                  ? "Add a spouse before adding a child."
+                  : isSpouseDeceased
+                  ? "Cannot add child: spouse is deceased."
+                  : "Add Child to this member"
+              }
+              aria-label={
+                !hasSpouse
+                  ? `Add Child to ${fullName} (Requires spouse)`
+                  : isSpouseDeceased
+                  ? `Cannot add child to ${fullName} (Spouse is deceased)`
+                  : `Add Child to ${fullName}`
+              }
               className={`px-2 py-0.5 rounded font-medium text-[10.5px] transition-colors shadow-2xs select-none ${
-                hasSpouse
+                hasSpouse && !isSpouseDeceased
                   ? "bg-white hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#7EA7D9] text-[#17233C] border border-[#B8D4FF] cursor-pointer"
                   : "opacity-40 cursor-not-allowed bg-white/50 text-[#17233C]/40 border border-[#B8D4FF]/40"
               }`}
@@ -806,35 +873,33 @@ export const HeritageMemberNode: React.FC<{ data: HeritageMemberNodeData }> = Re
             </button>
             <button
               type="button"
-              disabled={memberHasSpouse}
+              disabled={isSpouseDisabled}
               onClick={(e) => {
                 e.stopPropagation();
-                if (!memberHasSpouse) {
+                if (!isSpouseDisabled) {
                   onAddRelative?.(member, 'SPOUSE');
                 }
               }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
-                if ((e.key === 'Enter' || e.key === ' ') && !memberHasSpouse) {
+                if ((e.key === 'Enter' || e.key === ' ') && !isSpouseDisabled) {
                   e.preventDefault();
                   e.stopPropagation();
                   onAddRelative?.(member, 'SPOUSE');
                 }
               }}
-              title={
-                memberHasSpouse
-                  ? 'This member already has a spouse'
-                  : 'Add Spouse to this member'
-              }
+              title={spouseTooltip}
               aria-label={
                 memberHasSpouse
                   ? `${fullName} already has a spouse`
+                  : isUnderage
+                  ? `Cannot add spouse to ${fullName} (Must be 18 or older)`
                   : `Add Spouse to ${fullName}`
               }
               className={`px-2 py-0.5 rounded font-medium text-[10.5px] transition-colors shadow-2xs select-none ${
-                memberHasSpouse
-                  ? 'opacity-40 cursor-not-allowed pointer-events-none bg-white/50 text-[#17233C]/40 border border-[#B8D4FF]/40'
+                isSpouseDisabled
+                  ? 'opacity-50 cursor-not-allowed bg-white/50 text-[#17233C]/40 border border-[#B8D4FF]/40'
                   : 'bg-white hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#7EA7D9] text-[#17233C] border border-[#B8D4FF] cursor-pointer'
               }`}
             >

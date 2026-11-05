@@ -72,7 +72,7 @@ export const RegisterPage: React.FC = () => {
     }
 
     if (!cleanIdentifier || !cleanPassword) {
-      setErrorMessage('Please enter both your Email or Viewer Code and Password.');
+      setErrorMessage('Please enter both your Login Code and Password.');
       setHasAuthError(true);
       setIsLoading(false);
       return;

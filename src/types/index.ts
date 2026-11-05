@@ -48,6 +48,7 @@ export interface FamilyMember {
   branchId?: string;
   branchIds?: string[];
   branchName?: string;
+  nodeColor?: string;
   memoryCount?: number;
   isLinkedToUser?: boolean;
   linkedUserId?: string;

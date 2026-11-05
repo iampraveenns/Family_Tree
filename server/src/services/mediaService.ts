@@ -36,14 +36,24 @@ export class MediaService {
       throw new ForbiddenError('Memory does not belong to this family space');
     }
 
-    // RBAC: actor must be able to manage this memory
+    // RBAC: actor must be able to manage this memory or have upload permission for it
     const authResult = await authorizationService.canManageMemory(
       actorUserId,
       familyId,
       memory,
       Permission.EDIT_MEMORY
     );
-    if (!authResult.allowed) {
+    let isAllowed = authResult.allowed;
+    if (!isAllowed) {
+      // Allow if actor has UPLOAD_MEMORY permission and can view this family memory
+      const canUpload = await authorizationService.canCreateMemory(actorUserId, familyId);
+      const canView = await authorizationService.canViewMemory(actorUserId, familyId, memory);
+      if (canUpload.allowed && canView.allowed) {
+        isAllowed = true;
+      }
+    }
+
+    if (!isAllowed) {
       throw new ForbiddenError(authResult.reason || 'Not authorized to upload media to this memory');
     }
 
@@ -284,8 +294,45 @@ export class MediaService {
 
     const mimeType = options.isThumbnail ? 'image/webp' : (media.mimeType || 'video/mp4');
 
-    // Direct redirect if storageKey is an HTTP(S) or data URL
-    if (storageKey.startsWith('http://') || storageKey.startsWith('https://') || storageKey.startsWith('data:')) {
+    // Handle data: URIs directly as buffer streams to prevent ERR_UNSAFE_REDIRECT in browsers
+    if (storageKey.startsWith('data:')) {
+      try {
+        const commaIndex = storageKey.indexOf(',');
+        const header = storageKey.substring(0, commaIndex);
+        const mimeMatch = header.match(/data:([^;]+)/);
+        const resolvedMime = mimeMatch ? mimeMatch[1] : mimeType;
+        const base64Data = storageKey.substring(commaIndex + 1);
+        const buffer = Buffer.from(base64Data, 'base64');
+        const totalSize = buffer.length;
+
+        if (options.range) {
+          const start = options.range.start || 0;
+          const end = options.range.end !== undefined && !isNaN(options.range.end) ? options.range.end : totalSize - 1;
+          const chunk = buffer.subarray(start, end + 1);
+          return {
+            stream: Readable.from(chunk),
+            mimeType: resolvedMime,
+            fileName: media.originalFileName || 'media',
+            totalSize,
+            contentLength: chunk.length,
+            contentRange: `bytes ${start}-${end}/${totalSize}`,
+          };
+        }
+
+        return {
+          stream: Readable.from(buffer),
+          mimeType: resolvedMime,
+          fileName: media.originalFileName || 'media',
+          totalSize,
+          contentLength: totalSize,
+        };
+      } catch (err) {
+        console.error('Failed to parse base64 data URL for streaming:', err);
+      }
+    }
+
+    // Direct redirect if storageKey is an HTTP(S) URL
+    if (storageKey.startsWith('http://') || storageKey.startsWith('https://')) {
       return {
         redirectUrl: storageKey,
         mimeType,

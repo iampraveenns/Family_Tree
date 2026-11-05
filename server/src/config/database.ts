@@ -33,12 +33,35 @@ class Database {
     });
 
     mongoose.connection.on('error', (err) => {
-      logger.warn({ err: err.message }, 'MongoDB connection error');
+      if (mongoose.connection.readyState === 1) {
+        logger.warn({ err: err.message }, 'MongoDB connection warning');
+      }
     });
 
     mongoose.connection.on('disconnected', () => {
       logger.info('MongoDB disconnected');
     });
+  }
+
+  private async connectMemoryServer(): Promise<boolean> {
+    try {
+      const { MongoMemoryServer } = await import('mongodb-memory-server');
+      this.memoryServer = await MongoMemoryServer.create({
+        instance: {
+          dbName: 'familyroots',
+        },
+      });
+      const memoryUri = this.memoryServer.getUri();
+      logger.info({ uri: memoryUri }, 'Embedded MongoDB Memory Server active. Connecting Mongoose...');
+      await mongoose.connect(memoryUri);
+      this.isConnecting = false;
+      return true;
+    } catch (memErr: unknown) {
+      this.isConnecting = false;
+      const memMsg = memErr instanceof Error ? memErr.message : 'Memory server error';
+      logger.error({ error: memMsg }, 'Failed to initialize MongoDB Memory Server');
+      return false;
+    }
   }
 
   public async connect(): Promise<boolean> {
@@ -52,41 +75,26 @@ class Database {
 
     this.isConnecting = true;
 
-    // First attempt connecting to configured URI
+    // If no custom external MONGODB_URI is provided in process.env, boot embedded Memory Server directly
+    const hasCustomExternalUri = Boolean(process.env.MONGODB_URI && process.env.MONGODB_URI.trim().length > 0);
+    if (!hasCustomExternalUri) {
+      logger.info('Bootstrapping embedded MongoDB Memory Server for application...');
+      return this.connectMemoryServer();
+    }
+
+    // Attempt connecting to explicitly configured URI
     try {
       const sanitizedUri = config.MONGODB_URI.replace(/\/\/.*@/, '//<credentials>@');
-      logger.info({ uri: sanitizedUri }, 'Connecting to MongoDB...');
+      logger.info({ uri: sanitizedUri }, 'Connecting to external MongoDB...');
       await mongoose.connect(config.MONGODB_URI, {
         serverSelectionTimeoutMS: 2000,
         connectTimeoutMS: 3000,
       });
       this.isConnecting = false;
       return true;
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown database error';
-      logger.warn(
-        { error: message },
-        'External MongoDB daemon unavailable. Bootstrapping embedded MongoDB Memory Server for real MongoDB queries...'
-      );
-
-      try {
-        const { MongoMemoryServer } = await import('mongodb-memory-server');
-        this.memoryServer = await MongoMemoryServer.create({
-          instance: {
-            dbName: 'familyroots',
-          },
-        });
-        const memoryUri = this.memoryServer.getUri();
-        logger.info({ uri: memoryUri }, 'Embedded MongoDB Memory Server active. Connecting Mongoose...');
-        await mongoose.connect(memoryUri);
-        this.isConnecting = false;
-        return true;
-      } catch (memErr: unknown) {
-        this.isConnecting = false;
-        const memMsg = memErr instanceof Error ? memErr.message : 'Memory server error';
-        logger.error({ error: memMsg }, 'Failed to initialize MongoDB Memory Server');
-        return false;
-      }
+    } catch {
+      logger.info('External MongoDB URI unreachable, fallback to embedded MongoDB Memory Server...');
+      return this.connectMemoryServer();
     }
   }
 

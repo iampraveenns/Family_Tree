@@ -19,6 +19,9 @@
   --color-coral: #E9785B;
   --color-lavender: #8B7CF6;
   --color-amber: #F59E0B;
+  --color-butter-yellow: #FFF8D6;
+  --color-butter-yellow-border: #F5E7A3;
+  --color-butter-yellow-text: #263449;
 }
 
 @layer base {

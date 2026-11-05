@@ -8,7 +8,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(3000),
   CLIENT_URL: z.string().default('http://localhost:3000'),
-  MONGODB_URI: z.string().default('mongodb://localhost:27017/familyroots'),
+  MONGODB_URI: z.string().default(''),
   JWT_SECRET: z.string().default('familyroots_jwt_development_secret_change_in_prod'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   STORAGE_PROVIDER: z.enum(['local', 's3', 'cloudinary']).default('local'),

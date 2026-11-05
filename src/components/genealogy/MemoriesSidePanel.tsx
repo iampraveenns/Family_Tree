@@ -23,8 +23,9 @@ import {
 } from 'lucide-react';
 import { Memory, FamilyMember, MediaAsset } from '../../types/index.ts';
 import { MemberAvatar } from '../ui/MemberAvatar.tsx';
-import { resolveMediaStreamUrl, getMemoryCoverUrl, getMemoryVideoUrl, getMemoryAudioUrl, resolveMemoryAuthor } from '../../utils/mediaUtils.ts';
+import { resolveMediaStreamUrl, getMemoryCoverUrl, getMemoryVideoUrl, getMemoryAudioUrl, resolveMemoryAuthor, getVideoPreviewSrc } from '../../utils/mediaUtils.ts';
 import { formatSingleDate } from './HeritageMemberNode.tsx';
+import { MediaDetailLightboxModal } from './MediaDetailLightboxModal.tsx';
 
 export interface MemoriesSidePanelProps {
   isOpen: boolean;
@@ -49,57 +50,42 @@ export const VideoMemoryCardPlayer: React.FC<VideoMemoryCardPlayerProps> = ({
   memory,
   onOpenFullView,
 }) => {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [hasError, setHasError] = useState(false);
 
   const videoUrl = useMemo(() => {
-    return getMemoryVideoUrl(memory) || getMemoryCoverUrl(memory) || '';
+    return getMemoryVideoUrl(memory) || '';
+  }, [memory]);
+
+  const coverUrl = useMemo(() => {
+    return getMemoryCoverUrl(memory) || '';
   }, [memory]);
 
   useEffect(() => {
     setHasError(false);
   }, [videoUrl]);
 
-  const handleMouseEnter = () => {
-    if (videoRef.current && videoUrl && !hasError) {
-      videoRef.current.muted = true;
-      const playPromise = videoRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => setIsPlaying(true))
-          .catch((err) => {
-            console.debug('Autoplay hover play caught:', err);
-          });
-      }
-    }
-  };
-
-  const handleMouseLeave = () => {
-    if (videoRef.current) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    }
-  };
-
   return (
     <div
       data-testid={`video-card-player-${memory.id}`}
-      className="relative aspect-video rounded-xl overflow-hidden bg-black/95 group/video flex items-center justify-center border border-slate-700 shadow-inner"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onClick={onOpenFullView}
+      className="relative aspect-video rounded-xl overflow-hidden bg-black/95 group/video flex items-center justify-center border border-slate-700 shadow-inner cursor-pointer"
     >
+      {/* First-frame video preview or Poster/Thumbnail image */}
       {videoUrl && !hasError ? (
         <video
-          ref={videoRef}
-          src={videoUrl}
+          src={getVideoPreviewSrc(videoUrl)}
           muted
           playsInline
           preload="metadata"
-          loop
-          className="w-full h-full object-contain cursor-pointer"
+          className="w-full h-full object-cover group-hover/video:scale-105 transition-transform duration-300 pointer-events-none"
           onError={() => setHasError(true)}
-          onClick={onOpenFullView}
+        />
+      ) : coverUrl && !hasError ? (
+        <img
+          src={coverUrl}
+          alt={memory.title}
+          onError={() => setHasError(true)}
+          className="w-full h-full object-cover group-hover/video:scale-105 transition-transform duration-300"
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-4">
@@ -108,14 +94,20 @@ export const VideoMemoryCardPlayer: React.FC<VideoMemoryCardPlayerProps> = ({
         </div>
       )}
 
-      {/* Floating "Open Full View" button mirroring photo lightbox */}
+      {/* Video duration/type badge */}
+      <div className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-black/75 text-white text-[10px] font-medium flex items-center gap-1 backdrop-blur-xs z-10">
+        <Video className="w-3 h-3 text-blue-400" />
+        <span>Video Keepsake</span>
+      </div>
+
+      {/* Floating "Open Full View" button */}
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
           onOpenFullView();
         }}
-        className="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-lg bg-black/75 hover:bg-[#2563EB] text-white text-[11px] font-semibold flex items-center gap-1.5 shadow-md backdrop-blur-xs transition-all cursor-pointer opacity-90 hover:opacity-100 z-10"
+        className="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-lg bg-black/75 hover:bg-[#2563EB] text-white text-[11px] font-semibold flex items-center gap-1.5 shadow-md backdrop-blur-xs transition-all cursor-pointer opacity-90 group-hover/video:opacity-100 z-10"
         title="Open Full View"
         aria-label="Open Full View"
       >
@@ -123,36 +115,12 @@ export const VideoMemoryCardPlayer: React.FC<VideoMemoryCardPlayerProps> = ({
         <span>Open Full View</span>
       </button>
 
-      {/* Hover preview indicator badge */}
-      <div
-        className={`absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-black/70 text-white text-[10px] font-medium flex items-center gap-1 backdrop-blur-xs transition-opacity duration-200 pointer-events-none ${
-          isPlaying ? 'opacity-90' : 'opacity-0 group-hover/video:opacity-90'
-        }`}
-      >
-        {isPlaying ? (
-          <>
-            <Pause className="w-3 h-3 text-emerald-400" />
-            <span>Hovering (Playing muted)</span>
-          </>
-        ) : (
-          <>
-            <Play className="w-3 h-3 text-white" />
-            <span>Hover to preview</span>
-          </>
-        )}
-      </div>
-
-      {/* Center play icon overlay when paused */}
-      {!isPlaying && (
-        <div
-          onClick={onOpenFullView}
-          className="absolute inset-0 flex items-center justify-center cursor-pointer pointer-events-auto"
-        >
-          <div className="w-12 h-12 rounded-full bg-white/90 text-[#2563EB] flex items-center justify-center shadow-lg group-hover/video:scale-110 transition-transform">
-            <Play className="w-5 h-5 ml-0.5 fill-[#2563EB]" />
-          </div>
+      {/* Center play icon overlay (No hover autoplay - click opens lightbox) */}
+      <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover/video:bg-black/35 transition-colors pointer-events-none">
+        <div className="w-12 h-12 rounded-full bg-white/95 text-[#2563EB] flex items-center justify-center shadow-xl group-hover/video:scale-110 transition-transform">
+          <Play className="w-5 h-5 ml-0.5 fill-[#2563EB]" />
         </div>
-      )}
+      </div>
     </div>
   );
 };
@@ -416,7 +384,7 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 440, opacity: 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-            className="absolute right-0 top-0 bottom-0 w-84 sm:w-[420px] md:w-[440px] bg-white border-l-[1.5px] border-[#CBD5E1] shadow-2xl z-40 flex flex-col overflow-hidden text-[#0F172A]"
+            className="fixed top-14 bottom-0 right-0 h-[calc(100vh-3.5rem)] w-84 sm:w-[420px] md:w-[440px] bg-white border-l-[1.5px] border-[#CBD5E1] shadow-2xl z-50 flex flex-col overflow-hidden text-[#0F172A]"
             data-testid="memories-right-sidebar"
           >
             {/* Ask Gemini Style Header */}
@@ -538,19 +506,6 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                   <Mic className="w-3 h-3" />
                   <span>Audio ({counts.audio})</span>
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedFilter('STORY_DOC')}
-                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 ${
-                    selectedFilter === 'STORY_DOC'
-                      ? 'bg-[#2563EB] text-white shadow-xs font-semibold'
-                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  <FileText className="w-3 h-3" />
-                  <span>Stories & Docs ({counts.storyDocs})</span>
-                </button>
               </div>
             </div>
 
@@ -569,8 +524,8 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
               </button>
             </div>
 
-            {/* Memories Feed Content */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Memories Feed Content with generous bottom padding for last card visibility */}
+            <div className="flex-1 overflow-y-auto min-h-[480px] p-4 space-y-4 overscroll-contain scroll-smooth pb-32">
               {filteredMemories.length === 0 ? (
                 <div className="h-64 flex flex-col items-center justify-center text-center p-6 rounded-2xl bg-slate-50 border border-dashed border-slate-300">
                   <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center mb-3">
@@ -608,46 +563,36 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                     <div
                       key={mem.id}
                       data-testid={`memory-card-${mem.id}`}
-                      className="rounded-2xl border border-[#CBD5E1] bg-white p-3.5 shadow-xs hover:shadow-md transition-all group flex flex-col gap-2.5"
+                      className="rounded-2xl border border-[#F5E7A3] bg-[#FFF8D6] p-4 shadow-xs hover:shadow-md transition-all group flex flex-col gap-3 text-[#263449]"
                     >
                       {/* 1. TOP OF POST: Author who added the post (Above photo/video/audio, date, and location) */}
                       <div
                         data-testid={`memory-author-${mem.id}`}
-                        className="flex items-center justify-between pb-2 border-b border-slate-100"
+                        className="flex items-center justify-between pb-2.5 pt-0.5 border-b border-[#F5E7A3]"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0">
                           <MemberAvatar
                             member={authorMember || ({ firstName: authorName.split(' ')[0] || 'F', lastName: authorName.split(' ')[1] || 'M' } as any)}
                             src={authorPhoto || authorMember?.profilePhoto}
                             gender={authorMember?.gender}
                             size="sm"
-                            className="w-7 h-7 ring-1.5 ring-blue-500/20 shrink-0"
+                            className="w-9 h-9 ring-2 ring-[#F5E7A3] shrink-0"
                           />
                           <div className="flex flex-col min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold text-[#0F172A] truncate">
-                                {authorName}
-                              </span>
-                              {authorMember?.branchName && (
-                                <span className="text-[10px] text-slate-500 hidden sm:inline truncate">
-                                  • {authorMember.branchName}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-blue-600 font-medium leading-none">
+                            <span className="text-xs font-bold text-[#263449] truncate">
+                              {authorName}
+                            </span>
+                            <span className="text-[11px] text-[#263449]/70 font-medium leading-tight">
                               {`Added by ${authorName}`}
                             </span>
                           </div>
                         </div>
-                        <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60">
-                          Author
-                        </span>
                       </div>
 
                       {/* 2. Media Display Block: Photo / Video / Audio */}
                       {category === 'PHOTO' && coverUrl && (
                         <div
-                          className="relative aspect-video rounded-xl overflow-hidden bg-slate-100 cursor-pointer group/img border border-slate-200"
+                          className="relative aspect-video rounded-xl overflow-hidden bg-slate-100 cursor-pointer group/img border border-[#F5E7A3]"
                           onClick={() => setSelectedMemoryDetail(mem)}
                         >
                           <img
@@ -680,15 +625,15 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                       )}
 
                       {category === 'STORY_DOC' && !coverUrl && (
-                        <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 flex items-start gap-2.5">
-                          <div className="p-2 rounded-lg bg-amber-100 text-amber-800 shrink-0">
+                        <div className="p-3 rounded-xl bg-white/80 border border-[#F5E7A3] flex items-start gap-2.5">
+                          <div className="p-2 rounded-lg bg-[#FFF8D6] border border-[#F5E7A3] text-[#263449] shrink-0">
                             <FileText className="w-4 h-4" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 block">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#263449]/70 block">
                               Preserved Family Archive
                             </span>
-                            <p className="text-xs text-[#17233C] mt-0.5 line-clamp-2">
+                            <p className="text-xs text-[#263449] mt-0.5 line-clamp-2">
                               {mem.description || 'Ancestral documents, letters, or handwritten memories.'}
                             </p>
                           </div>
@@ -696,29 +641,29 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                       )}
 
                       {/* 3. Date & Location Line (below photo/video/audio) */}
-                      <div className="flex items-center justify-between text-[11px] text-[#64748B]">
+                      <div className="flex items-center justify-between text-[11px] text-[#263449]/70">
                         <div className="flex items-center gap-1.5">
                           {category === 'PHOTO' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold text-blue-700 bg-blue-50 border border-blue-200">
-                              <ImageIcon className="w-3 h-3" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold text-[#263449] bg-white/90 border border-[#F5E7A3]">
+                              <ImageIcon className="w-3 h-3 text-[#D4B83E]" />
                               Photo
                             </span>
                           )}
                           {category === 'VIDEO' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold text-purple-700 bg-purple-50 border border-purple-200">
-                              <Video className="w-3 h-3" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold text-[#263449] bg-white/90 border border-[#F5E7A3]">
+                              <Video className="w-3 h-3 text-[#D4B83E]" />
                               Video
                             </span>
                           )}
                           {category === 'AUDIO' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200">
-                              <Mic className="w-3 h-3" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold text-[#263449] bg-white/90 border border-[#F5E7A3]">
+                              <Mic className="w-3 h-3 text-[#D4B83E]" />
                               Audio
                             </span>
                           )}
                           {category === 'STORY_DOC' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold text-amber-700 bg-amber-50 border border-amber-200">
-                              <FileText className="w-3 h-3" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold text-[#263449] bg-white/90 border border-[#F5E7A3]">
+                              <FileText className="w-3 h-3 text-[#D4B83E]" />
                               {mem.memoryType === 'RECIPE'
                                 ? 'Recipe'
                                 : mem.memoryType === 'STORY'
@@ -728,8 +673,8 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                           )}
 
                           {mem.eventDate || mem.eventDateApprox ? (
-                            <span className="inline-flex items-center gap-1 text-[#475569]">
-                              <Calendar className="w-3 h-3 text-[#94A3B8]" />
+                            <span className="inline-flex items-center gap-1 text-[#263449]/80 font-medium">
+                              <Calendar className="w-3 h-3 text-[#D4B83E]" />
                               {formatSingleDate(mem.eventDate) || (mem.eventDateApprox && !/^\d{4}$/.test(mem.eventDateApprox) ? mem.eventDateApprox : formatSingleDate(mem.eventDateApprox)) || mem.eventDateApprox || mem.eventDate}
                             </span>
                           ) : null}
@@ -737,10 +682,10 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
 
                         {mem.location && (
                           <span
-                            className="inline-flex items-center gap-1 text-[#475569] truncate max-w-[140px]"
+                            className="inline-flex items-center gap-1 text-[#263449]/80 truncate max-w-[140px] font-medium"
                             title={mem.location}
                           >
-                            <MapPin className="w-3 h-3 text-[#94A3B8] shrink-0" />
+                            <MapPin className="w-3 h-3 text-[#D4B83E] shrink-0" />
                             <span className="truncate">{mem.location}</span>
                           </span>
                         )}
@@ -750,12 +695,12 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                       <div>
                         <h4
                           onClick={() => setSelectedMemoryDetail(mem)}
-                          className="font-bold text-xs sm:text-sm text-[#0F172A] hover:text-[#2563EB] transition-colors cursor-pointer"
+                          className="font-bold text-xs sm:text-sm text-[#263449] hover:underline transition-colors cursor-pointer"
                         >
                           {mem.title}
                         </h4>
                         {mem.description && (
-                          <p className="text-xs text-[#475569] mt-1 line-clamp-2 leading-relaxed">
+                          <p className="text-xs text-[#263449]/80 mt-1 line-clamp-2 leading-relaxed">
                             {mem.description}
                           </p>
                         )}
@@ -763,8 +708,8 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
 
                       {/* Tagged Family Members */}
                       {taggedMembers.length > 0 && (
-                        <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5">
-                          <span className="text-[10px] font-semibold text-[#64748B] flex items-center gap-1">
+                        <div className="pt-2 border-t border-[#F5E7A3] flex flex-col gap-1.5">
+                          <span className="text-[10px] font-semibold text-[#263449]/70 flex items-center gap-1">
                             <span>Tagged in tree:</span>
                           </span>
                           <div className="flex flex-wrap items-center gap-1.5">
@@ -773,10 +718,11 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                                 key={member.id}
                                 type="button"
                                 onClick={() => onSelectMember && onSelectMember(member.id)}
-                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50/80 hover:bg-blue-100/90 text-[#1D4ED8] text-[11px] font-medium transition-colors cursor-pointer border border-blue-200"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/90 hover:bg-[#FFF8D6] text-[#263449] text-[11px] font-medium transition-colors cursor-pointer border border-[#F5E7A3] shadow-2xs"
                                 title={`Focus ${member.displayName || member.firstName} in family tree`}
                               >
                                 <MemberAvatar
+                                  member={member}
                                   name={`${member.firstName} ${member.lastName}`}
                                   src={member.profilePhoto || (member as any).profileImageUrl}
                                   gender={member.gender}
@@ -790,14 +736,14 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
                       )}
 
                       {/* Contributor / Added by & Details Link */}
-                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-[#64748B]">
+                      <div className="pt-2 border-t border-[#F5E7A3] flex items-center justify-between text-[11px] text-[#263449]/75">
                         <span>
-                          Added by <strong className="text-slate-800">{authorName}</strong>
+                          Added by <strong className="text-[#263449]">{authorName}</strong>
                         </span>
                         <button
                           type="button"
                           onClick={() => setSelectedMemoryDetail(mem)}
-                          className="text-[#2563EB] hover:text-[#1D4ED8] font-semibold flex items-center gap-0.5 cursor-pointer"
+                          className="text-[#263449] hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
                         >
                           <span>Details</span>
                           <ExternalLink className="w-3 h-3" />
@@ -813,187 +759,17 @@ export const MemoriesSidePanel: React.FC<MemoriesSidePanelProps> = ({
       </AnimatePresence>
 
       {/* Memory Full Detail Modal / Lightbox */}
-      <AnimatePresence>
-        {selectedMemoryDetail && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-            onClick={() => setSelectedMemoryDetail(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
-            >
-              {/* Modal Header */}
-              {(() => {
-                const { authorMember: modalAuthor, authorName: modalAuthorName, authorPhoto: modalAuthorPhoto } =
-                  resolveMemoryAuthor(selectedMemoryDetail, members, membersById);
-
-                return (
-                  <div className="p-4 border-b border-[#E2E8F0] flex items-center justify-between bg-slate-50">
-                    <div className="flex items-center gap-2.5">
-                      <MemberAvatar
-                        member={modalAuthor || ({ firstName: modalAuthorName.split(' ')[0] || 'F', lastName: modalAuthorName.split(' ')[1] || 'M' } as any)}
-                        src={modalAuthorPhoto || modalAuthor?.profilePhoto}
-                        gender={modalAuthor?.gender}
-                        size="sm"
-                        className="w-8 h-8 ring-1.5 ring-blue-500/20 shrink-0"
-                      />
-                      <div>
-                        <h3 className="font-bold text-sm text-[#0F172A]">{selectedMemoryDetail.title}</h3>
-                        <p className="text-[11px] text-[#64748B]">
-                          {(selectedMemoryDetail.eventDate && formatSingleDate(selectedMemoryDetail.eventDate)) || selectedMemoryDetail.eventDateApprox || selectedMemoryDetail.location || 'Preserved memory'} • Added by <strong className="text-blue-700">{modalAuthorName}</strong>
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedMemoryDetail(null)}
-                      className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 cursor-pointer"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                );
-              })()}
-
-              {/* Modal Media Content */}
-              <div className="p-6 overflow-y-auto space-y-4">
-                {(() => {
-                  const modalVideoUrl = getMemoryVideoUrl(selectedMemoryDetail);
-                  const isVideo = getMemoryCategory(selectedMemoryDetail) === 'VIDEO' || !!modalVideoUrl;
-                  if (isVideo && modalVideoUrl) {
-                    return (
-                      <div className="rounded-xl overflow-hidden bg-black border border-slate-700 aspect-video flex items-center justify-center shadow-lg">
-                        <video
-                          src={modalVideoUrl}
-                          controls
-                          autoPlay
-                          playsInline
-                          className="w-full h-full max-h-[60vh] object-contain"
-                        />
-                      </div>
-                    );
-                  }
-
-                  const modalAudioUrl = getMemoryAudioUrl(selectedMemoryDetail);
-                  const isAudio = getMemoryCategory(selectedMemoryDetail) === 'AUDIO' || !!modalAudioUrl;
-                  if (isAudio && modalAudioUrl) {
-                    return (
-                      <div className="p-6 rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/70 border border-emerald-200 flex flex-col items-center justify-center text-center shadow-sm">
-                        <div className="w-14 h-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center mb-3 shadow-md">
-                          <Volume2 className="w-7 h-7" />
-                        </div>
-                        <h4 className="text-sm font-bold text-emerald-950 mb-1">Spoken Family Narrative & Voice</h4>
-                        <p className="text-xs text-emerald-700 mb-4 max-w-md">
-                          Oral history and voice keepsake preserved in the family archive.
-                        </p>
-                        <audio controls src={modalAudioUrl} autoPlay className="w-full max-w-md accent-emerald-600" />
-                      </div>
-                    );
-                  }
-
-                  if (getMemoryCoverUrl(selectedMemoryDetail)) {
-                    return (
-                      <div className="rounded-xl overflow-hidden bg-slate-900 border border-slate-200">
-                        <img
-                          src={getMemoryCoverUrl(selectedMemoryDetail)!}
-                          alt={selectedMemoryDetail.title}
-                          className="w-full max-h-96 object-contain mx-auto"
-                        />
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-
-                <div>
-                  <h4 className="font-bold text-base text-[#0F172A]">{selectedMemoryDetail.title}</h4>
-                  {selectedMemoryDetail.description && (
-                    <p className="text-xs text-[#334155] mt-2 whitespace-pre-wrap leading-relaxed">
-                      {selectedMemoryDetail.description}
-                    </p>
-                  )}
-                </div>
-
-                {/* Information Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100 text-xs">
-                  {(selectedMemoryDetail.eventDate || selectedMemoryDetail.eventDateApprox) && (
-                    <div className="p-2.5 rounded-xl bg-slate-50">
-                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Date / Period</span>
-                      <span className="font-semibold text-slate-800">
-                        {formatSingleDate(selectedMemoryDetail.eventDate) || selectedMemoryDetail.eventDateApprox || selectedMemoryDetail.eventDate}
-                      </span>
-                    </div>
-                  )}
-
-                  {selectedMemoryDetail.location && (
-                    <div className="p-2.5 rounded-xl bg-slate-50">
-                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Location</span>
-                      <span className="font-semibold text-slate-800">{selectedMemoryDetail.location}</span>
-                    </div>
-                  )}
-
-                  <div className="p-2.5 rounded-xl bg-slate-50">
-                    <span className="text-[10px] font-bold uppercase text-slate-400 block">Type</span>
-                    <span className="font-semibold text-slate-800">
-                      {selectedMemoryDetail.memoryType || 'Photo'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Tagged Relatives in Detail */}
-                {selectedMemoryDetail.memberIds && selectedMemoryDetail.memberIds.length > 0 && (
-                  <div className="pt-3 border-t border-slate-100">
-                    <span className="text-xs font-bold text-slate-700 block mb-2">
-                      Tagged Family Members:
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedMemoryDetail.memberIds.map((id) => {
-                        const m = membersById.get(id);
-                        if (!m) return null;
-                        return (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedMemoryDetail(null);
-                              onClose();
-                              onSelectMember && onSelectMember(m.id);
-                            }}
-                            className="flex items-center gap-2 p-1.5 pr-3 rounded-xl bg-blue-50 border border-blue-200 hover:bg-blue-100 text-xs text-[#1D4ED8] transition-colors cursor-pointer"
-                          >
-                            <MemberAvatar
-                              name={`${m.firstName} ${m.lastName}`}
-                              src={m.profilePhoto || (m as any).profileImageUrl}
-                              size="xs"
-                            />
-                            <span className="font-semibold">{m.displayName || `${m.firstName} ${m.lastName}`}</span>
-                            <span className="text-[10px] text-blue-500">(Focus in Tree)</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Modal Footer */}
-              <div className="p-4 border-t border-[#E2E8F0] bg-slate-50 flex items-center justify-end">
-                <button
-                  type="button"
-                  onClick={() => setSelectedMemoryDetail(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 font-semibold text-xs text-slate-700 cursor-pointer"
-                >
-                  Close
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <MediaDetailLightboxModal
+        isOpen={Boolean(selectedMemoryDetail)}
+        onClose={() => setSelectedMemoryDetail(null)}
+        memory={selectedMemoryDetail}
+        members={members}
+        onSelectMember={(m) => {
+          setSelectedMemoryDetail(null);
+          onClose();
+          onSelectMember && onSelectMember(m.id);
+        }}
+      />
     </>
   );
 };

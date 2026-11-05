@@ -97,6 +97,24 @@ export const EditLifeStatusModal: React.FC<EditLifeStatusModalProps> = ({
 
     try {
       const isLiving = status === 'LIVING';
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      if (!isLiving) {
+        if (!deathDate.trim()) {
+          setError('Death Date (DOD) is mandatory when marking a person as deceased (RIP).');
+          return;
+        }
+        if (deathDate.trim() > todayStr) {
+          setError('Death Date cannot be a future date.');
+          return;
+        }
+        const memberDob = toDateInputValue(member.dateOfBirth);
+        if (memberDob && deathDate.trim() < memberDob) {
+          setError(`Death Date cannot be earlier than Date of Birth (${memberDob}).`);
+          return;
+        }
+      }
+
       const effectiveDeathDate = isLiving ? null : (deathDate.trim() || null);
 
       await onSave(member.id, isLiving, effectiveDeathDate);
@@ -117,8 +135,8 @@ export const EditLifeStatusModal: React.FC<EditLifeStatusModalProps> = ({
       }
       maxWidth="sm"
       id="edit-life-status-modal"
-      className="!bg-[#FFF9D6] !border-[#B8D4FF] !rounded-[22px] shadow-[0_16px_48px_rgba(37,99,235,0.10),0_4px_16px_rgba(23,35,60,0.06)] text-[#17233C]"
-      style={{ backgroundColor: '#FFF9D6', color: '#17233C' }}
+      className="!bg-[#FFF8D6] !border-[#F5E7A3] !rounded-[22px] shadow-sm text-[#263449]"
+      style={{ backgroundColor: '#FFF8D6', color: '#263449' }}
     >
       <form onSubmit={handleSubmit} className="space-y-4 pt-0.5" noValidate={false}>
         {error && (
@@ -129,16 +147,16 @@ export const EditLifeStatusModal: React.FC<EditLifeStatusModalProps> = ({
 
         {/* Status Section using interactive Living & RIP radio-button layout */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-[#17233C] block">
+          <label className="text-xs font-semibold text-[#263449] block">
             Status
           </label>
-          <div className="flex items-center gap-2 p-1 rounded-xl bg-[#FFF9D6] border border-[#B8D4FF] shadow-[0_1px_3px_rgba(23,35,60,0.04)]">
+          <div className="flex items-center gap-2 p-1 rounded-xl bg-[#FFF8D6] border border-[#F5E7A3] shadow-2xs">
             {/* Living Option */}
             <label
               className={`flex-1 flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all duration-150 cursor-pointer select-none text-xs sm:text-sm ${
                 status === 'LIVING'
-                  ? 'bg-[#FEF08A]/60 border-[#B8D4FF] text-[#17233C] font-semibold shadow-2xs'
-                  : 'bg-transparent border-transparent text-[#17233C]/75 hover:bg-[#FEF08A]/30 hover:text-[#17233C] font-medium'
+                  ? 'bg-white/80 border-[#F5E7A3] text-[#263449] font-semibold shadow-2xs'
+                  : 'bg-transparent border-transparent text-[#263449]/75 hover:bg-white/40 hover:text-[#263449] font-medium'
               }`}
             >
               <input
@@ -157,8 +175,8 @@ export const EditLifeStatusModal: React.FC<EditLifeStatusModalProps> = ({
             <label
               className={`flex-1 flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all duration-150 cursor-pointer select-none text-xs sm:text-sm ${
                 status === 'DECEASED'
-                  ? 'bg-[#FEF08A]/60 border-[#B8D4FF] text-[#17233C] font-semibold shadow-2xs'
-                  : 'bg-transparent border-transparent text-[#17233C]/75 hover:bg-[#FEF08A]/30 hover:text-[#17233C] font-medium'
+                  ? 'bg-white/80 border-[#F5E7A3] text-[#263449] font-semibold shadow-2xs'
+                  : 'bg-transparent border-transparent text-[#263449]/75 hover:bg-white/40 hover:text-[#263449] font-medium'
               }`}
             >
               <input
@@ -191,12 +209,14 @@ export const EditLifeStatusModal: React.FC<EditLifeStatusModalProps> = ({
                   htmlFor="death-date-input"
                   className="text-xs font-semibold text-[#17233C] block"
                 >
-                  Death Date (DOD)
+                  Death Date (DOD) <span className="text-red-500">*</span>
                 </label>
                 <div className="relative flex items-center">
                   <input
                     id="death-date-input"
                     type="date"
+                    required
+                    max={new Date().toISOString().split('T')[0]}
                     value={deathDate}
                     onChange={(e) => {
                       setDeathDate(e.target.value);

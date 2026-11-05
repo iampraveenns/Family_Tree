@@ -18,6 +18,20 @@ import { ServiceContext } from './familyService.ts';
 
 import { formatStandardBranchName } from './branchService.ts';
 
+function calculateAgeYears(dobStr?: string | null, atDateStr?: string | null): number {
+  if (!dobStr) return 0;
+  const rawDob = dobStr.trim();
+  const birth = new Date(rawDob.includes('T') ? rawDob.split('T')[0] : rawDob);
+  const target = atDateStr ? new Date(atDateStr.includes('T') ? atDateStr.split('T')[0] : atDateStr) : new Date();
+  if (isNaN(birth.getTime()) || isNaN(target.getTime())) return 0;
+  let age = target.getFullYear() - birth.getFullYear();
+  const m = target.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && target.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 export class MemberService {
   private async resolveAndValidateBranchIds(
     familyId: string,
@@ -133,6 +147,41 @@ export class MemberService {
     // Mandatory fields check: First Name, Last Name, and Date of Birth
     if (!data.firstName?.trim() || !data.lastName?.trim() || !data.dateOfBirth?.trim()) {
       throw new ValidationError('First Name, Last Name, and Date of Birth are strictly mandatory.');
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const cleanDob = data.dateOfBirth.trim();
+    if (cleanDob > todayStr) {
+      throw new ValidationError('Date of Birth cannot be a future date.');
+    }
+
+    if (data.isLiving === false && (!data.dateOfDeath || !data.dateOfDeath.trim())) {
+      throw new ValidationError('Date of Death (DOD) is mandatory for a deceased person.');
+    }
+
+    if (data.dateOfDeath && data.dateOfDeath.trim()) {
+      const cleanDod = data.dateOfDeath.trim();
+      if (cleanDod > todayStr) {
+        throw new ValidationError('Date of Death cannot be a future date.');
+      }
+      if (cleanDod < cleanDob) {
+        throw new ValidationError('Date of Death cannot be earlier than Date of Birth.');
+      }
+    }
+
+    const rawDom = (data as any).dateOfMarriage || (data as any).marriageDate;
+    if (rawDom && typeof rawDom === 'string' && rawDom.trim()) {
+      const cleanDom = rawDom.trim();
+      if (cleanDom > todayStr) {
+        throw new ValidationError('Marriage date cannot be a future date.');
+      }
+      if (cleanDom < cleanDob) {
+        throw new ValidationError('Marriage date cannot be earlier than Date of Birth.');
+      }
+      const marriageAge = calculateAgeYears(cleanDob, cleanDom);
+      if (marriageAge <= 18) {
+        throw new ValidationError('A person can only get married if their calculated age is greater than 18 years.');
+      }
     }
 
     if (data.location !== undefined && typeof data.location === 'string') {
@@ -381,6 +430,44 @@ export class MemberService {
     }
     if (data.dateOfBirth !== undefined && !data.dateOfBirth.trim()) {
       throw new ValidationError('Date of Birth cannot be empty.');
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const effectiveDob = (data.dateOfBirth ?? existing.dateOfBirth)?.trim();
+
+    if (data.dateOfBirth !== undefined && data.dateOfBirth.trim() > todayStr) {
+      throw new ValidationError('Date of Birth cannot be a future date.');
+    }
+
+    if (data.isLiving === false && !data.dateOfDeath && !existing.dateOfDeath) {
+      throw new ValidationError('Date of Death (DOD) is mandatory when marking a member as deceased.');
+    }
+
+    if (data.dateOfDeath !== undefined && data.dateOfDeath && data.dateOfDeath.trim()) {
+      const cleanDod = data.dateOfDeath.trim();
+      if (cleanDod > todayStr) {
+        throw new ValidationError('Date of Death cannot be a future date.');
+      }
+      if (effectiveDob && cleanDod < effectiveDob) {
+        throw new ValidationError('Date of Death cannot be earlier than Date of Birth.');
+      }
+    }
+
+    const rawDom = (data as any).dateOfMarriage || (data as any).marriageDate;
+    if (rawDom && typeof rawDom === 'string' && rawDom.trim()) {
+      const cleanDom = rawDom.trim();
+      if (cleanDom > todayStr) {
+        throw new ValidationError('Marriage date cannot be a future date.');
+      }
+      if (effectiveDob && cleanDom < effectiveDob) {
+        throw new ValidationError('Marriage date cannot be earlier than Date of Birth.');
+      }
+      if (effectiveDob) {
+        const marriageAge = calculateAgeYears(effectiveDob, cleanDom);
+        if (marriageAge <= 18) {
+          throw new ValidationError('A person can only get married if their calculated age is greater than 18 years.');
+        }
+      }
     }
 
     if (data.location !== undefined && typeof data.location === 'string') {

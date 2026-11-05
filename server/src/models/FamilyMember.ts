@@ -29,6 +29,7 @@ export interface IFamilyMember extends Document {
   linkedUserId?: Types.ObjectId;
   registeredEmail?: string;
   branchIds: Types.ObjectId[];
+  nodeColor?: string;
   privacySettings: IMemberPrivacySettings;
   generation: number;
   siblingOrder?: number | null;
@@ -143,6 +144,11 @@ const FamilyMemberSchema = new Schema<IFamilyMember>(
     biography: {
       type: String,
       default: '',
+      trim: true,
+    },
+    nodeColor: {
+      type: String,
+      default: 'yellow',
       trim: true,
     },
     createdBy: {

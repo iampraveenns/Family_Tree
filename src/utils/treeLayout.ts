@@ -228,12 +228,16 @@ export function calculateTreeLayout(
       if (!parentToChildren.has(r.sourceMemberId)) {
         parentToChildren.set(r.sourceMemberId, []);
       }
-      parentToChildren.get(r.sourceMemberId)!.push(r.targetMemberId);
+      if (!parentToChildren.get(r.sourceMemberId)!.includes(r.targetMemberId)) {
+        parentToChildren.get(r.sourceMemberId)!.push(r.targetMemberId);
+      }
 
       if (!childToParents.has(r.targetMemberId)) {
         childToParents.set(r.targetMemberId, []);
       }
-      childToParents.get(r.targetMemberId)!.push(r.sourceMemberId);
+      if (!childToParents.get(r.targetMemberId)!.includes(r.sourceMemberId)) {
+        childToParents.get(r.targetMemberId)!.push(r.sourceMemberId);
+      }
     } else if (
       r.relationshipType === 'CHILD' ||
       r.relationshipType === 'ADOPTED_CHILD' ||
@@ -242,22 +246,30 @@ export function calculateTreeLayout(
       if (!parentToChildren.has(r.targetMemberId)) {
         parentToChildren.set(r.targetMemberId, []);
       }
-      parentToChildren.get(r.targetMemberId)!.push(r.sourceMemberId);
+      if (!parentToChildren.get(r.targetMemberId)!.includes(r.sourceMemberId)) {
+        parentToChildren.get(r.targetMemberId)!.push(r.sourceMemberId);
+      }
 
       if (!childToParents.has(r.sourceMemberId)) {
         childToParents.set(r.sourceMemberId, []);
       }
-      childToParents.get(r.sourceMemberId)!.push(r.targetMemberId);
+      if (!childToParents.get(r.sourceMemberId)!.includes(r.targetMemberId)) {
+        childToParents.get(r.sourceMemberId)!.push(r.targetMemberId);
+      }
     } else if (r.relationshipType === 'SPOUSE') {
       if (!spousePairs.has(r.sourceMemberId)) {
         spousePairs.set(r.sourceMemberId, []);
       }
-      spousePairs.get(r.sourceMemberId)!.push(r.targetMemberId);
+      if (!spousePairs.get(r.sourceMemberId)!.includes(r.targetMemberId)) {
+        spousePairs.get(r.sourceMemberId)!.push(r.targetMemberId);
+      }
 
       if (!spousePairs.has(r.targetMemberId)) {
         spousePairs.set(r.targetMemberId, []);
       }
-      spousePairs.get(r.targetMemberId)!.push(r.sourceMemberId);
+      if (!spousePairs.get(r.targetMemberId)!.includes(r.sourceMemberId)) {
+        spousePairs.get(r.targetMemberId)!.push(r.sourceMemberId);
+      }
     }
   });
 
@@ -1042,6 +1054,7 @@ export function calculateTreeLayout(
         (r.marriageDate || (r.metadata as any)?.marriageDate)
     );
     const spousePartner = spouses.length > 0 ? activeMemberMap.get(spouses[0]) : null;
+    const isSpouseDeceased = spousePartner ? (!spousePartner.isLiving || Boolean(spousePartner.dateOfDeath)) : false;
     const resolvedMarriageDate =
       (m as any).dateOfMarriage ||
       (m as any).marriageDate ||
@@ -1078,6 +1091,7 @@ export function calculateTreeLayout(
         isHoverRelated,
         isPathHighlighted,
         hasSpouse,
+        isSpouseDeceased,
         isPrimaryPartner: isPrimaryPartnerNode,
         isSecondarySpouse: isSecondarySpouseNode,
         hideRelationshipActions,
@@ -1110,6 +1124,13 @@ export function calculateTreeLayout(
 
   // Build React Flow Edges
   const finalEdges: Edge[] = [];
+  const edgeIdSet = new Set<string>();
+  const pushEdgeSafely = (edge: Edge) => {
+    if (!edgeIdSet.has(edge.id)) {
+      edgeIdSet.add(edge.id);
+      finalEdges.push(edge);
+    }
+  };
   const processedSpouseEdges = new Set<string>();
 
   // Pass A: Couple Junction Connections
@@ -1132,7 +1153,7 @@ export function calculateTreeLayout(
       !focusedNodeIds.has(j.parentB.id);
 
     // 1. Edge from Parent A (right handle) to Junction (left handle)
-    finalEdges.push({
+    pushEdgeSafely({
       id: `edge-${j.parentA.id}-${j.id}`,
       source: j.parentA.id,
       target: j.id,
@@ -1152,7 +1173,7 @@ export function calculateTreeLayout(
     });
 
     // 2. Edge from Junction (right handle) to Parent B (left handle)
-    finalEdges.push({
+    pushEdgeSafely({
       id: `edge-${j.id}-${j.parentB.id}`,
       source: j.id,
       target: j.parentB.id,
@@ -1184,7 +1205,7 @@ export function calculateTreeLayout(
         isConnectedToSelected ||
         isChildSelected;
 
-      finalEdges.push({
+      pushEdgeSafely({
         id: `edge-${j.id}-${childId}`,
         source: j.id,
         target: childId,
@@ -1247,7 +1268,7 @@ export function calculateTreeLayout(
           focusedNodeIds &&
           (!focusedNodeIds.has(parentId) || !focusedNodeIds.has(childId));
 
-        finalEdges.push({
+        pushEdgeSafely({
           id: r.id,
           source: parentId,
           target: childId,
@@ -1285,7 +1306,7 @@ export function calculateTreeLayout(
           selectedMemberId &&
           (r.sourceMemberId === selectedMemberId || r.targetMemberId === selectedMemberId);
 
-        finalEdges.push({
+        pushEdgeSafely({
           id: r.id,
           source: r.sourceMemberId,
           target: r.targetMemberId,

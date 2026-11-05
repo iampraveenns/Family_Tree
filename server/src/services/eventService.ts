@@ -178,6 +178,9 @@ export class EventService {
       if (isNaN(parsedDate.getTime())) {
         throw new ValidationError('Invalid eventDate provided');
       }
+      if (parsedDate.getTime() > Date.now()) {
+        throw new ValidationError('Event date cannot be a future date.');
+      }
     }
 
     // Compute era if not explicitly provided
@@ -322,6 +325,9 @@ export class EventService {
       } else {
         const parsed = new Date(input.eventDate);
         if (isNaN(parsed.getTime())) throw new ValidationError('Invalid eventDate');
+        if (parsed.getTime() > Date.now()) {
+          throw new ValidationError('Event date cannot be a future date.');
+        }
         updatePayload.eventDate = parsed;
       }
     }

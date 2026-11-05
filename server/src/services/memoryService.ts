@@ -109,6 +109,14 @@ export class MemoryService {
       .filter((t) => t.length > 0);
 
     const parsedDate = input.eventDate ? new Date(input.eventDate) : undefined;
+    if (parsedDate) {
+      if (isNaN(parsedDate.getTime())) {
+        throw new ValidationError('Invalid memory event date.');
+      }
+      if (parsedDate.getTime() > Date.now()) {
+        throw new ValidationError('Memory event date cannot be a future date.');
+      }
+    }
 
     // Resolve authoring member
     let authorMemberId: Types.ObjectId | undefined = undefined;
@@ -386,7 +394,13 @@ export class MemoryService {
         updates.eventDate = null;
       } else {
         const parsed = new Date(input.eventDate);
-        updates.eventDate = !isNaN(parsed.getTime()) ? parsed : null;
+        if (isNaN(parsed.getTime())) {
+          throw new ValidationError('Invalid memory event date.');
+        }
+        if (parsed.getTime() > Date.now()) {
+          throw new ValidationError('Memory event date cannot be a future date.');
+        }
+        updates.eventDate = parsed;
       }
     }
 

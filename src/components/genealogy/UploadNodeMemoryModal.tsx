@@ -208,6 +208,12 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
       return;
     }
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (eventDate.trim() > todayStr) {
+      setFormError('Memory event date cannot be a future date.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setFormError(null);
@@ -234,12 +240,14 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
         );
       }
       if (!selectedAuthor) {
-        selectedAuthor = member;
+        selectedAuthor = member || (members.length > 0 ? members[0] : null);
       }
       const authorFullName =
         customAuthorName.trim() ||
         (selectedAuthor
           ? selectedAuthor.displayName || `${selectedAuthor.firstName} ${selectedAuthor.lastName}`.trim()
+          : member
+          ? member.displayName || `${member.firstName} ${member.lastName}`.trim()
           : 'Family Member');
 
       // Tagged member IDs
@@ -260,6 +268,11 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
           ? [member.branchId]
           : undefined;
 
+      const resolvedAddedByMemberId =
+        selectedAuthor?.id ||
+        member?.id ||
+        (members.length > 0 ? members[0].id : undefined);
+
       const payload = {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -267,7 +280,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
         eventDate: eventDate.trim() || undefined,
         location: location.trim() || undefined,
         visibility: 'FAMILY' as const,
-        addedByMemberId: selectedAuthor?.id || member.id,
+        addedByMemberId: resolvedAddedByMemberId,
         addedByMemberName: authorFullName,
         memberIds: allMemberIds.length > 0 ? allMemberIds : undefined,
         branchIds,
@@ -319,8 +332,8 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
       }
       maxWidth="md"
       id="upload-node-memory-modal"
-      className="!bg-[#FFF9D6] !border-[#B8D4FF] text-[#17233C]"
-      style={{ backgroundColor: '#FFF9D6', color: '#17233C' }}
+      className="!bg-[#FFF8D6] !border-[#F5E7A3] text-[#263449]"
+      style={{ backgroundColor: '#FFF8D6', color: '#263449' }}
     >
       <form onSubmit={handleSubmit} className="space-y-3.5 pt-1" noValidate={false}>
         {formError && (
@@ -377,7 +390,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
         {/* 2. File Drag & Drop / Upload Area */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-[#17233C] flex items-center justify-between">
-            <span>Select Photo, Video, or Audio (Optional for story posts)</span>
+            <span>Select Photo, Video, or Audio</span>
             {mediaFile && (
               <span className="text-[10px] text-[#64748B] font-normal">
                 {(mediaFile.size / (1024 * 1024)).toFixed(2)} MB
@@ -525,7 +538,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
           />
         </div>
 
-        {/* 4. Tag Relatives in Memory (Optional) */}
+        {/* 4. Tag Relatives in Memory */}
         {members && members.length > 0 && (
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-[#17233C] flex items-center justify-between">
@@ -571,6 +584,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
               id="memory-event-date"
               type="date"
               required
+              max={new Date().toISOString().split('T')[0]}
               value={eventDate}
               onChange={(e) => setEventDate(e.target.value)}
               className="w-full px-3 py-1.5 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none cursor-pointer"
@@ -580,7 +594,7 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
           <div className="space-y-1">
             <label className="text-xs font-semibold text-[#17233C] flex items-center gap-1">
               <MapPin className="w-3 h-3 text-[#64748B]" />
-              <span>Location (Optional)</span>
+              <span>Location</span>
             </label>
             <input
               type="text"
@@ -592,17 +606,17 @@ export const UploadNodeMemoryModal: React.FC<UploadNodeMemoryModalProps> = ({
           </div>
         </div>
 
-        {/* 6. Description / Story text */}
+        {/* 6. Description / Bio text */}
         <div className="space-y-1">
           <label className="text-xs font-semibold text-[#17233C] flex items-center gap-1">
             <FileText className="w-3 h-3 text-[#64748B]" />
-            <span>Story or Notes (Optional)</span>
+            <span>Bio</span>
           </label>
           <textarea
             rows={2}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Share the story, precious words, memories, and who is in the picture..."
+            placeholder="Share the biography, story, precious memories, or background notes..."
             className="w-full px-3 py-1.5 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#17233C] focus:ring-2 focus:ring-[#2563EB] focus:outline-none resize-none"
           />
         </div>
